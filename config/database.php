@@ -1,10 +1,11 @@
 <?php
 session_start();
 
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', '***REMOVED***');
-define('DB_NAME', 'mpahira');
+$localConfig = __DIR__ . '/db.local.php';
+if (!file_exists($localConfig)) {
+    die('Missing config/db.local.php. Copy config/db.example.php to config/db.local.php and fill in your database credentials.');
+}
+require_once $localConfig;
 
 $conn = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 
