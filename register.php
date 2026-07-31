@@ -2,7 +2,7 @@
 require_once __DIR__ . '/config/database.php';
 
 if (is_logged_in()) {
-    redirect('index');
+    redirect('shop');
 }
 
 $errors = [];
@@ -62,9 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['role'] = 'customer';
 
             if (is_ajax()) {
-                json_response(['success' => true, 'redirect' => 'index']);
+                json_response(['success' => true, 'redirect' => 'shop']);
             }
-            redirect('index');
+            redirect('shop');
         }
         $errors[] = 'Registration failed. Please try again.';
     }

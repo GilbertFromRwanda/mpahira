@@ -1,9 +1,8 @@
 RewriteEngine On
-RewriteBase /mine/mpahira/
 
 # Canonical: redirect requests still using .php to the clean URL
-RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s/mine/mpahira/([^.]+)\.php[\s?] [NC]
-RewriteRule ^ /mine/mpahira/%1 [R=301,L]
+RewriteCond %{THE_REQUEST} ^[A-Z]{3,}\s/(.+)\.php[\s?] [NC]
+RewriteRule ^ /%1 [R=301,L]
 
 # Internally serve the .php file for a clean URL, without redirecting
 RewriteCond %{REQUEST_FILENAME} !-d

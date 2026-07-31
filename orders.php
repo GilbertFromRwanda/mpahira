@@ -8,7 +8,7 @@ $perPage = 10;
 function render_order_rows(array $orders): string
 {
     if (!$orders) {
-        return '<tr><td colspan="6" class="text-center text-muted">You have no orders yet. <a href="index">Start shopping</a>.</td></tr>';
+        return '<tr><td colspan="6" class="text-center text-muted">You have no orders yet. <a href="shop">Start shopping</a>.</td></tr>';
     }
 
     ob_start();
@@ -83,19 +83,21 @@ require_once __DIR__ . '/includes/header.php';
 
 <h3 class="mb-4">My Orders</h3>
 
-<table class="table bg-white align-middle">
-    <thead>
-        <tr>
-            <th>Order #</th>
-            <th>Date</th>
-            <th>Total</th>
-            <th>Payment</th>
-            <th>Status</th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody id="orderRows"><?= render_order_rows($orders) ?></tbody>
-</table>
+<div class="table-responsive">
+    <table class="table bg-white align-middle">
+        <thead>
+            <tr>
+                <th>Order #</th>
+                <th>Date</th>
+                <th>Total</th>
+                <th>Payment</th>
+                <th>Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody id="orderRows"><?= render_order_rows($orders) ?></tbody>
+    </table>
+</div>
 
 <div id="orderPagination"><?= render_orders_pagination($page, $totalPages) ?></div>
 

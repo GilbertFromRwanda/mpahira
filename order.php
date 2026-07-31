@@ -55,23 +55,25 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="row g-4">
     <div class="col-md-7">
-        <table class="table bg-white align-middle">
-            <thead>
-                <tr><th></th><th>Product</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr>
-            </thead>
-            <tbody>
-                <?php while ($item = mysqli_fetch_assoc($items)): ?>
-                    <?php $displayImage = $item['image'] ?: ($item['parent_image'] ?: $item['grandparent_image']); ?>
-                    <tr>
-                        <td><img src="<?= $displayImage ? 'uploads/' . e($displayImage) : 'https://placehold.co/60x60?text=No+Img' ?>" style="width:48px;height:48px;object-fit:cover;" loading="lazy"></td>
-                        <td><?= e($item['parent_name'] ? $item['parent_name'] . ' — ' . $item['name'] : $item['name']) ?></td>
-                        <td><?= (int) $item['quantity'] ?></td>
-                        <td><?= number_format((float) $item['price']) ?></td>
-                        <td><?= number_format((float) $item['subtotal']) ?></td>
-                    </tr>
-                <?php endwhile; ?>
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table class="table bg-white align-middle">
+                <thead>
+                    <tr><th></th><th>Product</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr>
+                </thead>
+                <tbody>
+                    <?php while ($item = mysqli_fetch_assoc($items)): ?>
+                        <?php $displayImage = $item['image'] ?: ($item['parent_image'] ?: $item['grandparent_image']); ?>
+                        <tr>
+                            <td><img src="<?= $displayImage ? 'uploads/' . e($displayImage) : 'https://placehold.co/60x60?text=No+Img' ?>" style="width:48px;height:48px;object-fit:cover;" loading="lazy"></td>
+                            <td><?= e($item['parent_name'] ? $item['parent_name'] . ' — ' . $item['name'] : $item['name']) ?></td>
+                            <td><?= (int) $item['quantity'] ?></td>
+                            <td><?= number_format((float) $item['price']) ?></td>
+                            <td><?= number_format((float) $item['subtotal']) ?></td>
+                        </tr>
+                    <?php endwhile; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
     <div class="col-md-5">
         <div class="card p-3 mb-3">

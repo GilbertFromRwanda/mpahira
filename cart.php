@@ -37,7 +37,7 @@ function fetch_cart_rows(mysqli $conn, int $cartId): array
 function render_cart(mysqli $conn, array $rows): string
 {
     if (!$rows) {
-        return '<p class="text-muted">Your cart is empty. <a href="index">Browse products</a>.</p>';
+        return '<p class="text-muted">Your cart is empty. <a href="shop">Browse products</a>.</p>';
     }
 
     $subtotal = array_sum(array_column($rows, 'line_total'));
@@ -46,39 +46,41 @@ function render_cart(mysqli $conn, array $rows): string
 
     ob_start();
     ?>
-    <table class="table bg-white align-middle">
-        <thead>
-            <tr>
-                <th></th>
-                <th>Product</th>
-                <th>Price</th>
-                <th>Quantity</th>
-                <th>Subtotal</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($rows as $item): ?>
+    <div class="table-responsive">
+        <table class="table bg-white align-middle">
+            <thead>
                 <tr>
-                    <td>
-                        <img src="<?= $item['display_image'] ? 'uploads/' . e($item['display_image']) : 'https://placehold.co/60x60?text=No+Img' ?>" style="width:48px;height:48px;object-fit:cover;" loading="lazy">
-                    </td>
-                    <td><?= e($item['display_name']) ?></td>
-                    <td><?= number_format((float) $item['price']) ?></td>
-                    <td>
-                        <form class="d-flex gap-1 cart-update-form" data-item-id="<?= (int) $item['id'] ?>">
-                            <input type="number" name="quantity" value="<?= (int) $item['quantity'] ?>" min="1" class="form-control form-control-sm" style="width:70px;">
-                            <button type="submit" class="btn btn-sm btn-outline-dark">Update</button>
-                        </form>
-                    </td>
-                    <td class="line-total"><?= number_format($item['line_total']) ?></td>
-                    <td>
-                        <button type="button" class="btn btn-sm btn-outline-danger cart-remove-btn" data-item-id="<?= (int) $item['id'] ?>">Remove</button>
-                    </td>
+                    <th></th>
+                    <th>Product</th>
+                    <th>Price</th>
+                    <th>Quantity</th>
+                    <th>Subtotal</th>
+                    <th></th>
                 </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <?php foreach ($rows as $item): ?>
+                    <tr>
+                        <td>
+                            <img src="<?= $item['display_image'] ? 'uploads/' . e($item['display_image']) : 'https://placehold.co/60x60?text=No+Img' ?>" style="width:48px;height:48px;object-fit:cover;" loading="lazy">
+                        </td>
+                        <td><?= e($item['display_name']) ?></td>
+                        <td><?= number_format((float) $item['price']) ?></td>
+                        <td>
+                            <form class="d-flex gap-1 cart-update-form" data-item-id="<?= (int) $item['id'] ?>">
+                                <input type="number" name="quantity" value="<?= (int) $item['quantity'] ?>" min="1" class="form-control form-control-sm" style="width:70px;">
+                                <button type="submit" class="btn btn-sm btn-outline-dark">Update</button>
+                            </form>
+                        </td>
+                        <td class="line-total"><?= number_format($item['line_total']) ?></td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger cart-remove-btn" data-item-id="<?= (int) $item['id'] ?>">Remove</button>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
 
     <div class="d-flex justify-content-end">
         <div class="text-end">

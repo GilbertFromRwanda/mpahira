@@ -48,6 +48,55 @@ a:hover {
     font-weight: 800;
     font-size: 1.35rem;
     letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+}
+
+.navbar-logo {
+    height: 44px;
+    width: auto;
+    border-radius: 8px;
+    background: #fff;
+    padding: 3px 6px;
+}
+
+.header-cart-mobile {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    font-size: 1.4rem;
+    line-height: 1;
+    text-decoration: none;
+    margin-left: .5rem;
+}
+
+.header-cart-mobile .cart-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    font-size: .65rem;
+}
+
+.header-search-form {
+    width: 100%;
+    margin-top: .5rem;
+    min-width: 0;
+}
+
+.header-search-form #headerSearchInput {
+    flex-grow: 1;
+}
+
+@media (min-width: 992px) {
+    .header-search-form {
+        width: auto;
+        flex-grow: 1;
+        margin: 0 1rem 0;
+    }
+
+    .header-search-form #headerSearchInput {
+        flex-grow: 1;
+    }
 }
 
 .navbar-dark .navbar-nav .nav-link {

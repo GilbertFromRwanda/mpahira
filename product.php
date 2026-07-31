@@ -177,7 +177,7 @@ require_once __DIR__ . '/includes/header.php';
             </form>
         <?php endif; ?>
 
-        <a href="index" class="btn btn-link mt-3 ps-0">&larr; Back to shop</a>
+        <a href="shop" class="btn btn-link mt-3 ps-0">&larr; Back to shop</a>
     </div>
 </div>
 
