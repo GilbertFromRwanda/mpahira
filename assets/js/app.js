@@ -42,12 +42,12 @@ function escapeHtml(value) {
 }
 
 function updateCartBadge(total) {
-    const badge = document.getElementById('cartBadge');
-    if (!badge) return;
-    if (total > 0) {
-        badge.textContent = Number(total).toLocaleString();
-        badge.classList.remove('d-none');
-    } else {
-        badge.classList.add('d-none');
-    }
+    document.querySelectorAll('.cart-badge').forEach(function (badge) {
+        if (total > 0) {
+            badge.textContent = Number(total).toLocaleString();
+            badge.classList.remove('d-none');
+        } else {
+            badge.classList.add('d-none');
+        }
+    });
 }

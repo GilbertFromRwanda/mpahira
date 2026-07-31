@@ -2,7 +2,7 @@
 require_once __DIR__ . '/config/database.php';
 
 if (is_logged_in()) {
-    redirect('index');
+    redirect('shop');
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['name'] = $user['name'];
         $_SESSION['role'] = $user['role'];
         $_SESSION['is_super'] = (bool) $user['is_super'];
-        $redirectUrl = $user['role'] === 'admin' ? 'admin/dashboard' : 'index';
+        $redirectUrl = $user['role'] === 'admin' ? 'admin/dashboard' : 'shop';
 
         if (is_ajax()) {
             json_response(['success' => true, 'redirect' => $redirectUrl]);
