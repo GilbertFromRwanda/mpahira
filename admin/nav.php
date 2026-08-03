@@ -26,6 +26,9 @@
         <a class="nav-link <?= $current === 'migrations' ? 'active' : '' ?>" href="migrations">Migrations</a>
     </li>
     <li class="nav-item">
+        <a class="nav-link <?= $current === 'storage' ? 'active' : '' ?>" href="storage">Storage</a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link <?= $current === 'settings' ? 'active' : '' ?>" href="settings">Settings</a>
     </li>
     <?php endif; ?>

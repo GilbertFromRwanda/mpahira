@@ -144,6 +144,7 @@ require_once __DIR__ . '/nav.php';
 
 <p class="text-muted small">Runs the <code>.sql</code> files in <code>/database</code> against this database, statement by statement. Some statements (e.g. adding a column that already exists) may safely error on a re-run &mdash; check the log for details.</p>
 
+<div class="table-responsive">
 <table class="table table-bordered bg-white align-middle">
     <thead>
         <tr>
@@ -155,6 +156,7 @@ require_once __DIR__ . '/nav.php';
     </thead>
     <tbody id="migrationRows"><?= render_migration_rows($conn) ?></tbody>
 </table>
+</div>
 
 <div class="modal fade" id="logModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-scrollable modal-lg">

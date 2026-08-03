@@ -18,7 +18,7 @@ function render_order_rows(array $orders): string
             <td><?= e(date('M j, Y g:i A', strtotime($order['created_at']))) ?></td>
             <td><?= number_format((float) $order['total'] + (float) $order['delivery_fee']) ?><?= $order['delivery_fee_type'] === 'negotiable' ? ' + TBD' : '' ?></td>
             <td><?= e($order['payment_method']) ?></td>
-            <td><span class="badge bg-info text-dark"><?= e(str_replace('_', ' ', $order['status'])) ?></span></td>
+            <td><span class="badge <?= order_status_badge_class($order['status']) ?>"><?= e(str_replace('_', ' ', $order['status'])) ?></span></td>
             <td><a href="order?id=<?= (int) $order['id'] ?>" class="btn btn-sm btn-outline-dark">View</a></td>
         </tr>
     <?php endforeach;
@@ -60,7 +60,7 @@ require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/nav.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
     <h5 class="mb-0">All Orders</h5>
     <select id="statusFilter" class="form-select form-select-sm" style="width:auto;">
         <option value="">All statuses</option>
@@ -70,6 +70,7 @@ require_once __DIR__ . '/nav.php';
     </select>
 </div>
 
+<div class="table-responsive">
 <table class="table table-bordered bg-white align-middle">
     <thead>
         <tr>
@@ -84,6 +85,7 @@ require_once __DIR__ . '/nav.php';
     </thead>
     <tbody id="orderRows"><?= render_order_rows($orders) ?></tbody>
 </table>
+</div>
 
 <script>
 document.getElementById('statusFilter').addEventListener('change', function () {

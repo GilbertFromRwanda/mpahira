@@ -166,9 +166,10 @@ function flash_get(): ?array
     return $flash;
 }
 
-function notify_order_placed(mysqli $conn, int $orderId): void
+function notify_order_placed(mysqli $conn, int $orderId, float $amount, string $deliveryFeeType = 'fixed'): void
 {
-    $message = 'New order #' . $orderId . ' placed.';
+    $amountText = number_format($amount) . ' RWF' . ($deliveryFeeType === 'negotiable' ? ' + delivery (TBD)' : '');
+    $message = 'New order #' . $orderId . ' placed — ' . $amountText . '.';
 
     $admins = mysqli_query($conn, "SELECT id FROM users WHERE role = 'admin'");
     $stmt = mysqli_prepare($conn, 'INSERT INTO notifications (user_id, order_id, message) VALUES (?, ?, ?)');
@@ -178,6 +179,33 @@ function notify_order_placed(mysqli $conn, int $orderId): void
         mysqli_stmt_bind_param($stmt, 'iis', $adminId, $orderId, $message);
         mysqli_stmt_execute($stmt);
     }
+}
+
+function fetch_status_history(mysqli $conn, int $orderId): array
+{
+    $stmt = mysqli_prepare($conn, '
+        SELECT h.status, h.comment, h.created_at, u.name AS admin_name
+        FROM order_status_history h
+        JOIN users u ON u.id = h.created_by
+        WHERE h.order_id = ?
+        ORDER BY h.id DESC
+    ');
+    mysqli_stmt_bind_param($stmt, 'i', $orderId);
+    mysqli_stmt_execute($stmt);
+    return mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+}
+
+function order_status_badge_class(string $status): string
+{
+    $map = [
+        'pending' => 'badge-status-pending',
+        'confirmed' => 'badge-status-confirmed',
+        'preparing' => 'badge-status-preparing',
+        'out_for_delivery' => 'badge-status-out-for-delivery',
+        'delivered' => 'badge-status-delivered',
+        'cancelled' => 'badge-status-cancelled',
+    ];
+    return $map[$status] ?? 'bg-secondary';
 }
 
 function get_setting(mysqli $conn, string $key, string $default = ''): string

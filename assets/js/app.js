@@ -51,3 +51,10 @@ function updateCartBadge(total) {
         }
     });
 }
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+        const swUrl = document.querySelector('link[rel="manifest"]').href.replace('manifest.json', 'sw.js');
+        navigator.serviceWorker.register(swUrl).catch(function () {});
+    });
+}
