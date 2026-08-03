@@ -248,6 +248,7 @@ require_once __DIR__ . '/nav.php';
     <div class="text-muted small" id="userCount"><?= (int) $result['total'] ?> user<?= $result['total'] === 1 ? '' : 's' ?></div>
 </div>
 
+<div class="table-responsive">
 <table class="table table-bordered bg-white align-middle">
     <thead>
         <tr>
@@ -260,6 +261,7 @@ require_once __DIR__ . '/nav.php';
     </thead>
     <tbody id="userRows"><?= render_user_rows($result['rows'], $currentUserId, $permissionsMap) ?></tbody>
 </table>
+</div>
 
 <div id="userPagination" class="d-flex justify-content-center"><?= render_pagination($page, $totalPages) ?></div>
 

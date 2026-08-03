@@ -38,6 +38,29 @@ mysqli_stmt_bind_param($stmt, 'i', $orderId);
 mysqli_stmt_execute($stmt);
 $items = mysqli_stmt_get_result($stmt);
 
+$paymentProofIsPdf = $order['payment_proof'] && strtolower(pathinfo($order['payment_proof'], PATHINFO_EXTENSION)) === 'pdf';
+
+function render_customer_status_history(array $rows): string
+{
+    if (!$rows) {
+        return '<p class="text-muted small mb-0">No status changes yet.</p>';
+    }
+
+    ob_start();
+    foreach ($rows as $row): ?>
+        <div class="border-bottom pb-2 mb-2">
+            <div class="d-flex justify-content-between">
+                <span class="badge <?= order_status_badge_class($row['status']) ?>"><?= e(str_replace('_', ' ', $row['status'])) ?></span>
+                <span class="text-muted small"><?= e(date('M j, Y g:i A', strtotime($row['created_at']))) ?></span>
+            </div>
+            <?php if ($row['comment'] !== ''): ?>
+                <p class="mb-0 small"><?= e($row['comment']) ?></p>
+            <?php endif; ?>
+        </div>
+    <?php endforeach;
+    return ob_get_clean();
+}
+
 $pageTitle = 'Order #' . $orderId;
 $flash = flash_get();
 require_once __DIR__ . '/includes/header.php';
@@ -49,7 +72,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <h3 class="mb-3">Order #<?= (int) $order['id'] ?></h3>
 <p>
-    Status: <span class="badge bg-info text-dark"><?= e(str_replace('_', ' ', $order['status'])) ?></span>
+    Status: <span class="badge <?= order_status_badge_class($order['status']) ?>"><?= e(str_replace('_', ' ', $order['status'])) ?></span>
     &nbsp;|&nbsp; Placed on <?= e(date('M j, Y g:i A', strtotime($order['created_at']))) ?>
 </p>
 
@@ -90,13 +113,38 @@ require_once __DIR__ . '/includes/header.php';
             <h5>Payment</h5>
             <p class="mb-1">Method: <?= e($order['payment_method']) ?></p>
             <?php if ($order['payment_proof']): ?>
-                <p class="mb-1"><a href="uploads/<?= e($order['payment_proof']) ?>" target="_blank" rel="noopener">View uploaded payment proof</a></p>
+                <p class="mb-1"><a href="#" data-bs-toggle="modal" data-bs-target="#paymentProofModal">View uploaded payment proof</a></p>
             <?php endif; ?>
             <div class="d-flex justify-content-between"><span>Subtotal</span><span><?= number_format((float) $order['total']) ?></span></div>
             <div class="d-flex justify-content-between"><span>Delivery Fee</span><span><?= $order['delivery_fee_type'] === 'negotiable' ? 'Negotiable' : number_format((float) $order['delivery_fee']) ?></span></div>
             <div class="d-flex justify-content-between fw-bold"><span>Total</span><span><?= $order['delivery_fee_type'] === 'negotiable' ? number_format((float) $order['total']) . ' + delivery (TBD)' : number_format((float) $order['total'] + (float) $order['delivery_fee']) . ' RWF' ?></span></div>
         </div>
+
+        <div class="card p-3 mt-3">
+            <h5>Status History</h5>
+            <?= render_customer_status_history(fetch_status_history($conn, $orderId)) ?>
+        </div>
     </div>
 </div>
+
+<?php if ($order['payment_proof']): ?>
+<div class="modal fade" id="paymentProofModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Payment Proof</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <?php if ($paymentProofIsPdf): ?>
+                    <iframe src="uploads/<?= e($order['payment_proof']) ?>" style="width:100%;height:75vh;border:0;"></iframe>
+                <?php else: ?>
+                    <img src="uploads/<?= e($order['payment_proof']) ?>" class="img-fluid" alt="Payment proof">
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

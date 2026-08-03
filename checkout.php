@@ -20,11 +20,16 @@ function handle_payment_proof_upload(array $file): array
     if (!in_array($ext, PAYMENT_PROOF_EXT, true)) {
         return [null, 'Payment proof must be jpg, png, gif, webp or pdf.'];
     }
-    $filename = uniqid('proof_', true) . '.' . $ext;
-    if (!move_uploaded_file($file['tmp_name'], __DIR__ . '/uploads/' . $filename)) {
+    $subdir = date('Y') . '/' . date('m');
+    $dir = __DIR__ . '/uploads/payment_proofs/' . $subdir;
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
         return [null, 'Could not save payment proof.'];
     }
-    return [$filename, null];
+    $filename = uniqid('proof_', true) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $filename)) {
+        return [null, 'Could not save payment proof.'];
+    }
+    return ['payment_proofs/' . $subdir . '/' . $filename, null];
 }
 
 $userId = (int) $_SESSION['user_id'];
@@ -175,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         mysqli_query($conn, 'DELETE FROM cart_items WHERE cart_id = ' . $cartId);
 
-        notify_order_placed($conn, $orderId);
+        notify_order_placed($conn, $orderId, $total + $deliveryFee, $deliveryFeeType);
 
         flash_set('success', 'Order placed successfully.');
 

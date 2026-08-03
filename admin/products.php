@@ -378,6 +378,7 @@ require_once __DIR__ . '/nav.php';
     <button type="button" class="btn btn-dark text-nowrap" id="openAddModalBtn" data-bs-toggle="modal" data-bs-target="#productModal">+ Add Product</button>
 </div>
 
+<div class="table-responsive">
 <table class="table table-bordered bg-white align-middle">
     <thead>
         <tr>
@@ -391,6 +392,7 @@ require_once __DIR__ . '/nav.php';
     </thead>
     <tbody id="productRows"><?= render_product_rows($products) ?></tbody>
 </table>
+</div>
 
 <div class="modal fade" id="productModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">

@@ -105,6 +105,7 @@ require_once __DIR__ . '/nav.php';
     <button type="button" class="btn btn-dark text-nowrap" id="openAddModalBtn" data-bs-toggle="modal" data-bs-target="#categoryModal">+ Add Category</button>
 </div>
 
+<div class="table-responsive">
 <table class="table table-bordered bg-white align-middle">
     <thead>
         <tr>
@@ -115,6 +116,7 @@ require_once __DIR__ . '/nav.php';
     </thead>
     <tbody id="categoryRows"><?= render_category_rows($categories) ?></tbody>
 </table>
+</div>
 
 <div class="modal fade" id="categoryModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">

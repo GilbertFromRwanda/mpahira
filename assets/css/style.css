@@ -17,11 +17,22 @@
     --shadow-lg: 0 20px 45px rgba(20, 20, 10, 0.14);
 }
 
+html {
+    height: 100%;
+}
+
 body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
     background-color: var(--color-bg);
     color: var(--color-text);
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
+}
+
+body > main {
+    flex: 1 0 auto;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -222,6 +233,15 @@ a:hover {
     box-shadow: var(--shadow-sm);
 }
 
+.dashboard-card {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.dashboard-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
 /* ---------- Product grid ---------- */
 .product-grid {
     display: grid;
@@ -379,6 +399,32 @@ a:hover {
     color: var(--color-primary-dark) !important;
 }
 
+/* ---------- Order status badges ---------- */
+.badge-status-pending {
+    background-color: #eef0f2 !important;
+    color: #495159 !important;
+}
+.badge-status-confirmed {
+    background-color: #e7f1fd !important;
+    color: #1c5cab !important;
+}
+.badge-status-preparing {
+    background-color: var(--color-accent-light) !important;
+    color: #7a4b00 !important;
+}
+.badge-status-out-for-delivery {
+    background-color: #eee9fb !important;
+    color: #4a3aa7 !important;
+}
+.badge-status-delivered {
+    background-color: var(--color-primary-light) !important;
+    color: var(--color-primary-dark) !important;
+}
+.badge-status-cancelled {
+    background-color: #fdecec !important;
+    color: #b42318 !important;
+}
+
 /* ---------- Tables ---------- */
 .table {
     background-color: var(--color-surface);
@@ -410,6 +456,10 @@ a:hover {
 /* ---------- Nav tabs (admin) ---------- */
 .nav-tabs {
     border-bottom-color: var(--color-border);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 .nav-tabs .nav-link {
@@ -418,6 +468,7 @@ a:hover {
     font-weight: 600;
     padding: 0.6rem 1.1rem;
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    white-space: nowrap;
 }
 
 .nav-tabs .nav-link:hover {
@@ -455,6 +506,7 @@ a:hover {
 /* ---------- Footer ---------- */
 footer.bg-dark {
     background-color: #16281b !important;
+    flex-shrink: 0;
 }
 
 /* ---------- Scroll sentinel ---------- */

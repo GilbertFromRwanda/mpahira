@@ -18,7 +18,7 @@ function render_order_rows(array $orders): string
             <td><?= e(date('M j, Y', strtotime($order['created_at']))) ?></td>
             <td><?= number_format((float) $order['total'] + (float) $order['delivery_fee']) ?> RWF<?= $order['delivery_fee_type'] === 'negotiable' ? ' + TBD' : '' ?></td>
             <td><?= e($order['payment_method']) ?></td>
-            <td><span class="badge bg-info text-dark"><?= e(str_replace('_', ' ', $order['status'])) ?></span></td>
+            <td><span class="badge <?= order_status_badge_class($order['status']) ?>"><?= e(str_replace('_', ' ', $order['status'])) ?></span></td>
             <td><a href="order?id=<?= (int) $order['id'] ?>" class="btn btn-sm btn-outline-dark">View</a></td>
         </tr>
     <?php endforeach;

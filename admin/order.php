@@ -9,20 +9,6 @@ $orderId = (int) ($_GET['id'] ?? 0);
 $paymentMethodList = mysqli_fetch_all(mysqli_query($conn, 'SELECT name FROM payment_methods ORDER BY name'), MYSQLI_ASSOC);
 $paymentMethodNames = array_column($paymentMethodList, 'name');
 
-function fetch_status_history(mysqli $conn, int $orderId): array
-{
-    $stmt = mysqli_prepare($conn, '
-        SELECT h.status, h.comment, h.created_at, u.name AS admin_name
-        FROM order_status_history h
-        JOIN users u ON u.id = h.created_by
-        WHERE h.order_id = ?
-        ORDER BY h.id DESC
-    ');
-    mysqli_stmt_bind_param($stmt, 'i', $orderId);
-    mysqli_stmt_execute($stmt);
-    return mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
-}
-
 function render_status_history(array $rows): string
 {
     if (!$rows) {
@@ -33,7 +19,7 @@ function render_status_history(array $rows): string
     foreach ($rows as $row): ?>
         <div class="border-bottom pb-2 mb-2">
             <div class="d-flex justify-content-between">
-                <span class="badge bg-info text-dark"><?= e(str_replace('_', ' ', $row['status'])) ?></span>
+                <span class="badge <?= order_status_badge_class($row['status']) ?>"><?= e(str_replace('_', ' ', $row['status'])) ?></span>
                 <span class="text-muted small"><?= e(date('M j, Y g:i A', strtotime($row['created_at']))) ?></span>
             </div>
             <p class="mb-0 small"><?= e($row['comment']) ?></p>
@@ -49,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['status'])) {
     $success = false;
     $message = 'Invalid status.';
 
-    if ($comment === '') {
-        $message = 'Please add a comment before updating the status.';
+    if ($status === 'cancelled' && $comment === '') {
+        $message = 'Please add a comment explaining why the order is cancelled.';
     } elseif (in_array($status, ORDER_STATUSES, true)) {
         $stmt = mysqli_prepare($conn, 'UPDATE orders SET status = ? WHERE id = ?');
         mysqli_stmt_bind_param($stmt, 'si', $status, $orderId);
@@ -144,6 +130,8 @@ mysqli_stmt_bind_param($stmt, 'i', $orderId);
 mysqli_stmt_execute($stmt);
 $items = mysqli_stmt_get_result($stmt);
 
+$paymentProofIsPdf = $order['payment_proof'] && strtolower(pathinfo($order['payment_proof'], PATHINFO_EXTENSION)) === 'pdf';
+
 $pageTitle = 'Order #' . $orderId;
 $flash = flash_get();
 require_once __DIR__ . '/../includes/header.php';
@@ -163,6 +151,7 @@ require_once __DIR__ . '/nav.php';
 
 <div class="row g-4">
     <div class="col-md-7">
+        <div class="table-responsive">
         <table class="table bg-white align-middle">
             <thead>
                 <tr><th></th><th>Product</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr>
@@ -180,6 +169,7 @@ require_once __DIR__ . '/nav.php';
                 <?php endwhile; ?>
             </tbody>
         </table>
+        </div>
     </div>
 
     <div class="col-md-5">
@@ -215,7 +205,7 @@ require_once __DIR__ . '/nav.php';
                 <button type="submit" class="btn btn-dark">Update</button>
             </form>
             <?php if ($order['payment_proof']): ?>
-                <p class="mb-3"><a href="../uploads/<?= e($order['payment_proof']) ?>" target="_blank" rel="noopener">View uploaded payment proof</a></p>
+                <p class="mb-3"><a href="#" data-bs-toggle="modal" data-bs-target="#paymentProofModal">View uploaded payment proof</a></p>
             <?php endif; ?>
             <div class="d-flex justify-content-between"><span>Subtotal</span><span><?= number_format((float) $order['total']) ?></span></div>
             <div class="d-flex justify-content-between"><span>Delivery Fee</span><span><?= $order['delivery_fee_type'] === 'negotiable' ? 'Negotiable' : number_format((float) $order['delivery_fee']) ?></span></div>
@@ -225,12 +215,12 @@ require_once __DIR__ . '/nav.php';
         <div class="card p-3 mb-3">
             <h5>Status</h5>
             <form id="statusForm">
-                <select name="status" class="form-select mb-2">
+                <select name="status" id="statusFormSelect" class="form-select mb-2">
                     <?php foreach (ORDER_STATUSES as $s): ?>
                         <option value="<?= $s ?>" <?= $order['status'] === $s ? 'selected' : '' ?>><?= e(str_replace('_', ' ', $s)) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <textarea name="comment" class="form-control mb-2" rows="2" placeholder="Add a comment about this status change*" required></textarea>
+                <textarea name="comment" id="statusFormComment" class="form-control mb-2" rows="2" placeholder="Add a comment about this status change (optional)"></textarea>
                 <button type="submit" class="btn btn-dark w-100">Update</button>
             </form>
         </div>
@@ -242,7 +232,40 @@ require_once __DIR__ . '/nav.php';
     </div>
 </div>
 
+<?php if ($order['payment_proof']): ?>
+<div class="modal fade" id="paymentProofModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Payment Proof</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <?php if ($paymentProofIsPdf): ?>
+                    <iframe src="../uploads/<?= e($order['payment_proof']) ?>" style="width:100%;height:75vh;border:0;"></iframe>
+                <?php else: ?>
+                    <img src="../uploads/<?= e($order['payment_proof']) ?>" class="img-fluid" alt="Payment proof">
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
+const statusFormSelect = document.getElementById('statusFormSelect');
+const statusFormComment = document.getElementById('statusFormComment');
+
+function syncCommentRequired() {
+    const isCancelled = statusFormSelect.value === 'cancelled';
+    statusFormComment.required = isCancelled;
+    statusFormComment.placeholder = isCancelled
+        ? 'Add a comment explaining the cancellation*'
+        : 'Add a comment about this status change (optional)';
+}
+statusFormSelect.addEventListener('change', syncCommentRequired);
+syncCommentRequired();
+
 document.getElementById('statusForm').addEventListener('submit', function (e) {
     e.preventDefault();
     const form = this;

@@ -233,18 +233,75 @@ require_once __DIR__ . '/../includes/header.php';
 require_once __DIR__ . '/nav.php';
 ?>
 
+<style>
+.settings-header { display: flex; align-items: center; gap: .85rem; }
+.settings-header-icon {
+    width: 46px; height: 46px; border-radius: var(--radius-sm);
+    background: var(--color-primary-light); color: var(--color-primary-dark);
+    display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0;
+}
+.settings-nav-card { border-radius: var(--radius-md); }
+.settings-nav { gap: .3rem; }
+.settings-nav .settings-nav-link {
+    display: flex; align-items: center; gap: .75rem; width: 100%; text-align: left;
+    border: none; background: transparent; border-radius: var(--radius-sm);
+    padding: .65rem .8rem; color: var(--color-text); transition: background-color .15s ease, color .15s ease;
+}
+.settings-nav .settings-nav-link:hover { background-color: var(--color-primary-light); }
+.settings-nav .settings-nav-link.active { background-color: var(--color-primary); color: #fff; }
+.settings-nav .settings-nav-link.active .settings-nav-desc { color: rgba(255, 255, 255, .85); }
+.settings-nav-icon { font-size: 1.2rem; line-height: 1; width: 26px; text-align: center; flex-shrink: 0; }
+.settings-nav-title { display: block; font-size: .92rem; font-weight: 600; }
+.settings-nav-desc { display: block; font-size: .74rem; font-weight: 500; color: var(--color-text-muted); }
+.settings-section-card { border-radius: var(--radius-md); }
+.settings-section-header { display: flex; align-items: flex-start; gap: .7rem; }
+.settings-section-icon {
+    width: 38px; height: 38px; border-radius: 10px; background: var(--color-primary-light);
+    display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0;
+}
+.settings-form-card { max-width: 560px; }
+</style>
+
 <div id="formMessage">
     <?php if ($flash): ?>
         <div class="alert alert-<?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
     <?php endif; ?>
 </div>
 
+<div class="settings-header mb-4">
+    <div class="settings-header-icon">&#9881;&#65039;</div>
+    <div>
+        <h1 class="h4 mb-1">Settings</h1>
+        <p class="text-muted mb-0">Configure ordering rules, delivery zones, and payment methods for your store.</p>
+    </div>
+</div>
+
 <div class="row g-4">
     <div class="col-md-3">
-        <div class="nav flex-column nav-pills" id="settingsTabs" role="tablist" aria-orientation="vertical">
-            <button class="nav-link <?= $activeTab === 'general' ? 'active' : '' ?>" data-bs-toggle="pill" data-bs-target="#tab-general" type="button">General</button>
-            <button class="nav-link <?= $activeTab === 'zones' ? 'active' : '' ?>" data-bs-toggle="pill" data-bs-target="#tab-zones" type="button">Delivery Zones</button>
-            <button class="nav-link <?= $activeTab === 'payment-methods' ? 'active' : '' ?>" data-bs-toggle="pill" data-bs-target="#tab-payment-methods" type="button">Payment Methods</button>
+        <div class="card settings-nav-card p-2">
+            <div class="nav flex-column settings-nav" id="settingsTabs" role="tablist" aria-orientation="vertical">
+                <button class="settings-nav-link <?= $activeTab === 'general' ? 'active' : '' ?>" data-bs-toggle="pill" data-bs-target="#tab-general" type="button">
+                    <span class="settings-nav-icon">&#9881;&#65039;</span>
+                    <span>
+                        <span class="settings-nav-title">General</span>
+                        <span class="settings-nav-desc">Ordering &amp; contact</span>
+                    </span>
+                </button>
+                <button class="settings-nav-link <?= $activeTab === 'zones' ? 'active' : '' ?>" data-bs-toggle="pill" data-bs-target="#tab-zones" type="button">
+                    <span class="settings-nav-icon">&#128666;</span>
+                    <span>
+                        <span class="settings-nav-title">Delivery Zones</span>
+                        <span class="settings-nav-desc"><?= count($zones) ?> zone<?= count($zones) === 1 ? '' : 's' ?></span>
+                    </span>
+                </button>
+                <button class="settings-nav-link <?= $activeTab === 'payment-methods' ? 'active' : '' ?>" data-bs-toggle="pill" data-bs-target="#tab-payment-methods" type="button">
+                    <span class="settings-nav-icon">&#128179;</span>
+                    <span>
+                        <span class="settings-nav-title">Payment Methods</span>
+                        <span class="settings-nav-desc"><?= count($methods) ?> method<?= count($methods) === 1 ? '' : 's' ?></span>
+                    </span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -252,87 +309,125 @@ require_once __DIR__ . '/nav.php';
         <div class="tab-content">
 
             <div class="tab-pane fade <?= $activeTab === 'general' ? 'show active' : '' ?>" id="tab-general">
-                <div class="card p-3" style="max-width: 480px;">
-                    <h5>Ordering</h5>
+                <div class="settings-form-card">
                     <form id="settingsForm">
                         <input type="hidden" name="section" value="general">
-                        <div class="mb-3">
-                            <label class="form-label">Minimum order total (RWF)</label>
-                            <input type="number" step="0.01" min="0" name="min_order_total" class="form-control" value="<?= e((string) $minOrderTotal) ?>">
-                            <div class="form-text">Customers can't place an order until their cart subtotal reaches this amount. Set to 0 to disable.</div>
+
+                        <div class="card settings-section-card p-3 p-md-4 mb-4">
+                            <div class="settings-section-header mb-3">
+                                <span class="settings-section-icon">&#128722;</span>
+                                <div>
+                                    <h5 class="mb-0">Ordering</h5>
+                                    <div class="text-muted small">Rules applied at checkout</div>
+                                </div>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label">Minimum order total (RWF)</label>
+                                <input type="number" step="0.01" min="0" name="min_order_total" class="form-control" value="<?= e((string) $minOrderTotal) ?>">
+                                <div class="form-text">Customers can't place an order until their cart subtotal reaches this amount. Set to 0 to disable.</div>
+                            </div>
                         </div>
-                        <hr>
-                        <h5>Contact</h5>
-                        <div class="mb-3">
-                            <label class="form-label">WhatsApp number</label>
-                            <input type="text" name="whatsapp_phone" class="form-control" placeholder="e.g. 250788123456" value="<?= e($whatsappPhone) ?>">
-                            <div class="form-text">Shown as a WhatsApp chat link in the site footer. Include the country code, no spaces or symbols.</div>
+
+                        <div class="card settings-section-card p-3 p-md-4 mb-4">
+                            <div class="settings-section-header mb-3">
+                                <span class="settings-section-icon">&#128222;</span>
+                                <div>
+                                    <h5 class="mb-0">Contact</h5>
+                                    <div class="text-muted small">Shown to customers in the site footer</div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">WhatsApp number</label>
+                                <input type="text" name="whatsapp_phone" class="form-control" placeholder="e.g. 250788123456" value="<?= e($whatsappPhone) ?>">
+                                <div class="form-text">Shown as a WhatsApp chat link in the site footer. Include the country code, no spaces or symbols.</div>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label">Contact phone</label>
+                                <input type="text" name="contact_phone" class="form-control" placeholder="e.g. 0788123456" value="<?= e($contactPhone) ?>">
+                                <div class="form-text">Shown in the site footer for customers to call.</div>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Contact phone</label>
-                            <input type="text" name="contact_phone" class="form-control" placeholder="e.g. 0788123456" value="<?= e($contactPhone) ?>">
-                            <div class="form-text">Shown in the site footer for customers to call.</div>
-                        </div>
-                        <button type="submit" class="btn btn-dark">Save</button>
+
+                        <button type="submit" class="btn btn-dark px-4">Save changes</button>
                     </form>
                 </div>
             </div>
 
             <div class="tab-pane fade <?= $activeTab === 'zones' ? 'show active' : '' ?>" id="tab-zones">
-                <p class="text-muted small">Only <strong>active</strong> zones are offered to customers at checkout. A <strong>negotiable</strong> zone lets the customer place the order without a fixed delivery fee &mdash; you agree the amount with them directly.</p>
-
-                <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
-                    <div class="d-flex gap-2">
-                        <input type="text" id="zoneSearch" class="form-control" placeholder="Search zones..." autocomplete="off" style="max-width:220px;">
-                        <select id="zoneStatusFilter" class="form-select" style="max-width:160px;">
-                            <option value="">All statuses</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
+                <div class="card settings-section-card p-3 p-md-4">
+                    <div class="settings-section-header mb-3">
+                        <span class="settings-section-icon">&#128666;</span>
+                        <div>
+                            <h5 class="mb-0">Delivery Zones</h5>
+                            <div class="text-muted small">Only <strong>active</strong> zones are offered to customers at checkout. A <strong>negotiable</strong> zone lets the customer place the order without a fixed delivery fee &mdash; you agree the amount with them directly.</div>
+                        </div>
                     </div>
-                    <button type="button" class="btn btn-dark text-nowrap" id="openAddZoneModalBtn" data-bs-toggle="modal" data-bs-target="#zoneModal">+ Add Zone</button>
-                </div>
 
-                <table class="table table-bordered bg-white align-middle">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Fee</th>
-                            <th>Status</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="zoneRows"><?= render_zone_rows($zones) ?></tbody>
-                </table>
+                    <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+                        <div class="d-flex gap-2">
+                            <input type="text" id="zoneSearch" class="form-control" placeholder="Search zones..." autocomplete="off" style="max-width:220px;">
+                            <select id="zoneStatusFilter" class="form-select" style="max-width:160px;">
+                                <option value="">All statuses</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-dark text-nowrap" id="openAddZoneModalBtn" data-bs-toggle="modal" data-bs-target="#zoneModal">+ Add Zone</button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered bg-white align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Fee</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="zoneRows"><?= render_zone_rows($zones) ?></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <div class="tab-pane fade <?= $activeTab === 'payment-methods' ? 'show active' : '' ?>" id="tab-payment-methods">
-                <p class="text-muted small">Only <strong>active</strong> payment methods are offered to customers at checkout.</p>
-
-                <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
-                    <div class="d-flex gap-2">
-                        <input type="text" id="methodSearch" class="form-control" placeholder="Search payment methods..." autocomplete="off" style="max-width:220px;">
-                        <select id="methodStatusFilter" class="form-select" style="max-width:160px;">
-                            <option value="">All statuses</option>
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
+                <div class="card settings-section-card p-3 p-md-4">
+                    <div class="settings-section-header mb-3">
+                        <span class="settings-section-icon">&#128179;</span>
+                        <div>
+                            <h5 class="mb-0">Payment Methods</h5>
+                            <div class="text-muted small">Only <strong>active</strong> payment methods are offered to customers at checkout.</div>
+                        </div>
                     </div>
-                    <button type="button" class="btn btn-dark text-nowrap" id="openAddMethodModalBtn" data-bs-toggle="modal" data-bs-target="#methodModal">+ Add Payment Method</button>
-                </div>
 
-                <table class="table table-bordered bg-white align-middle">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Status</th>
-                            <th>Payment Proof</th>
-                            <th>Send-to Info</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="methodRows"><?= render_payment_method_rows($methods) ?></tbody>
-                </table>
+                    <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+                        <div class="d-flex gap-2">
+                            <input type="text" id="methodSearch" class="form-control" placeholder="Search payment methods..." autocomplete="off" style="max-width:220px;">
+                            <select id="methodStatusFilter" class="form-select" style="max-width:160px;">
+                                <option value="">All statuses</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-dark text-nowrap" id="openAddMethodModalBtn" data-bs-toggle="modal" data-bs-target="#methodModal">+ Add Payment Method</button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered bg-white align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Status</th>
+                                    <th>Payment Proof</th>
+                                    <th>Send-to Info</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="methodRows"><?= render_payment_method_rows($methods) ?></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
         </div>

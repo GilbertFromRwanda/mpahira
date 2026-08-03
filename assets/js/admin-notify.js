@@ -8,6 +8,7 @@
 // deleted server-side. Only loaded on pages where the admin bell is present.
 (function () {
     var adminBase = window.__ADMIN_NOTIFY_BASE || '';
+    var siteBase = window.__SITE_BASE || '';
     var pollUrl = adminBase + 'notifications_poll.php';
     var ordersUrl = adminBase + 'orders';
     function orderUrl(n) { return n.order_id ? adminBase + 'order?id=' + n.order_id : ordersUrl; }
@@ -20,6 +21,8 @@
         '.anCard a{display:inline-block;margin-top:8px;color:#8fd19e;font-weight:700;text-decoration:none;font-size:12px;}',
         '.anCard a:hover{text-decoration:underline;}',
         '.anCard .anClose{float:right;cursor:pointer;color:#9ca3af;margin-left:10px;}',
+        '.nav-notif-panel-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;}',
+        '.anMuteBtn{border:none;background:none;cursor:pointer;font-size:14px;line-height:1;padding:2px;color:inherit;}',
     ].join('\n');
     document.head.appendChild(style);
 
@@ -49,9 +52,62 @@
 
     function escH(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
+    // Bell chime for new orders. Browsers block audio until the page has had
+    // a user interaction, so the first click/keydown "unlocks" the element by
+    // playing (and immediately pausing/rewinding) it — after that, playNotifySound()
+    // can fire freely from the long-poll response with no further gesture needed.
+    var notifyAudio = new Audio(siteBase + 'assets/audio/bell-notification-audo.wav');
+    notifyAudio.preload = 'auto';
+    var audioUnlocked = false;
+    function unlockAudio() {
+        if (audioUnlocked) return;
+        notifyAudio.play().then(function () {
+            notifyAudio.pause();
+            notifyAudio.currentTime = 0;
+            audioUnlocked = true;
+        }).catch(function () {});
+    }
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+
+    var MUTE_KEY = 'mpahiraAdminNotifyMuted';
+    var muted = localStorage.getItem(MUTE_KEY) === '1';
+
+    function playNotifySound() {
+        if (muted) return;
+        notifyAudio.currentTime = 0;
+        notifyAudio.play().catch(function () {});
+    }
+
     var bell = document.getElementById('navNotifBell');
     var panel = document.getElementById('navNotifPanel');
     var panelList = document.getElementById('navNotifList');
+    var panelHdr = panel && panel.querySelector('.nav-notif-panel-hdr');
+
+    var muteBtn = null;
+    if (panelHdr) {
+        var hdrLabel = document.createElement('span');
+        hdrLabel.textContent = panelHdr.textContent;
+        muteBtn = document.createElement('button');
+        muteBtn.type = 'button';
+        muteBtn.className = 'anMuteBtn';
+        muteBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            muted = !muted;
+            localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+            renderMuteBtn();
+        });
+        panelHdr.innerHTML = '';
+        panelHdr.appendChild(hdrLabel);
+        panelHdr.appendChild(muteBtn);
+    }
+
+    function renderMuteBtn() {
+        if (!muteBtn) return;
+        muteBtn.textContent = muted ? '🔕' : '🔔';
+        muteBtn.title = muted ? 'Unmute order notification sound' : 'Mute order notification sound';
+    }
+    renderMuteBtn();
 
     function renderList(rows) {
         if (!rows.length) { panelList.innerHTML = '<div class="nav-notif-empty">No notifications</div>'; return; }
@@ -115,7 +171,10 @@
             .then(function (r) { return r.ok ? r.json() : []; })
             .then(function (list) {
                 list = list || [];
-                if (list.length) bumpBadge(list.length);
+                if (list.length) {
+                    bumpBadge(list.length);
+                    playNotifySound();
+                }
                 list.forEach(showNotification);
                 poll();
             })
