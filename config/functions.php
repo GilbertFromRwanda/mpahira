@@ -120,6 +120,23 @@ function clean_text(string $value, int $maxLength): string
     return mb_substr($value, 0, $maxLength);
 }
 
+// Turns free-text user search input into a MySQL FULLTEXT boolean-mode query: each
+// word becomes a mandatory prefix match (+word*), so multi-word searches AND together
+// instead of requiring the exact phrase as a literal substring. Words under 2 chars are
+// dropped (InnoDB's default innodb_ft_min_token_size ignores them anyway); returns '' if
+// nothing usable is left, so callers can skip the MATCH clause entirely.
+function build_fulltext_boolean_query(string $search): string
+{
+    preg_match_all('/[\p{L}\p{N}]+/u', $search, $matches);
+    $tokens = array_filter($matches[0], fn ($t) => mb_strlen($t) >= 2);
+
+    if (!$tokens) {
+        return '';
+    }
+
+    return implode(' ', array_map(fn ($t) => '+' . $t . '*', $tokens));
+}
+
 function is_ajax(): bool
 {
     return isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';

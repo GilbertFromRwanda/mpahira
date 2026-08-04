@@ -3,6 +3,26 @@ require_once __DIR__ . '/config/database.php';
 
 const PRODUCTS_PER_PAGE = 12;
 
+// Substitutes bound params back into a prepared-statement SQL template for debug display —
+// not for re-execution. Values are quoted/escaped per bind type, matching mysqli_stmt_bind_param's type string.
+function interpolate_query(string $sql, string $types, array $params, mysqli $conn): string
+{
+    $i = 0;
+    return preg_replace_callback('/\?/', function () use (&$i, $types, $params, $conn) {
+        $value = $params[$i];
+        $type = $types[$i];
+        $i++;
+
+        if ($type === 'i') {
+            return (string) (int) $value;
+        }
+        if ($type === 'd') {
+            return (string) (float) $value;
+        }
+        return "'" . mysqli_real_escape_string($conn, (string) $value) . "'";
+    }, $sql);
+}
+
 function fetch_cart_product_ids(mysqli $conn): array
 {
     if (!is_logged_in()) {
@@ -65,28 +85,7 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $offset = ($page - 1) * PRODUCTS_PER_PAGE;
 
 $sql = "
-    SELECT p.id, p.name, p.price, p.image,
-           EXISTS (SELECT 1 FROM products v WHERE v.parent_id = p.id AND v.status = 'active') AS has_variants,
-           COALESCE(
-               NULLIF(
-                   LEAST(
-                       COALESCE(
-                           (SELECT MIN(v.price) FROM products v
-                            WHERE v.parent_id = p.id AND v.status = 'active'
-                              AND NOT EXISTS (SELECT 1 FROM products g WHERE g.parent_id = v.id AND g.status = 'active')),
-                           999999999.99
-                       ),
-                       COALESCE(
-                           (SELECT MIN(g.price) FROM products v
-                            JOIN products g ON g.parent_id = v.id
-                            WHERE v.parent_id = p.id AND v.status = 'active' AND g.status = 'active'),
-                           999999999.99
-                       )
-                   ),
-                   999999999.99
-               ),
-               p.price
-           ) AS display_price
+    SELECT p.id, p.name, p.price, p.image, p.has_variants, p.display_price
     FROM products p
     WHERE p.status = 'active' AND p.parent_id IS NULL
 ";
@@ -99,19 +98,11 @@ if ($categoryId > 0) {
     $params[] = $categoryId;
 }
 
-if ($search !== '') {
-    $sql .= ' AND (
-        p.name LIKE ?
-        OR EXISTS (SELECT 1 FROM products v WHERE v.parent_id = p.id AND v.name LIKE ?)
-        OR EXISTS (SELECT 1 FROM products v JOIN products g ON g.parent_id = v.id WHERE v.parent_id = p.id AND g.name LIKE ?)
-        OR EXISTS (SELECT 1 FROM product_meta pm WHERE pm.product_id = p.id AND pm.meta_value LIKE ?)
-    )';
-    $types .= 'ssss';
-    $like = '%' . $search . '%';
-    $params[] = $like;
-    $params[] = $like;
-    $params[] = $like;
-    $params[] = $like;
+$booleanSearch = build_fulltext_boolean_query($search);
+if ($booleanSearch !== '') {
+    $sql .= ' AND MATCH (p.search_blob) AGAINST (? IN BOOLEAN MODE)';
+    $types .= 's';
+    $params[] = $booleanSearch;
 }
 
 $sql .= ' ORDER BY p.created_at DESC LIMIT ? OFFSET ?';
@@ -130,9 +121,11 @@ if ($hasMore) {
 }
 
 $cartProductIds = fetch_cart_product_ids($conn);
+// 'sql' => interpolate_query($sql, $types, $params, $conn)
 
 if (is_ajax()) {
-    json_response(['html' => render_product_grid($products, $cartProductIds), 'has_more' => $hasMore]);
+    json_response(['html' => render_product_grid($products, $cartProductIds), 'has_more' => $hasMore, 
+    ]);
 }
 
 $categories = mysqli_query($conn, 'SELECT id, name FROM categories ORDER BY name');
@@ -308,11 +301,15 @@ function setupModalVariantPicker(p) {
     function render() {
         const v = getSelectedVariant();
         if (!v) {
+            const t = getSelectedType();
+            const image = (t && t.image) || p.image;
+            imageEl.src = image ? 'uploads/' + image : 'https://placehold.co/400x300?text=No+Image';
             area.innerHTML = '<p class="text-danger fw-bold">No packages available for this option.</p>';
             return;
         }
         priceEl.textContent = Number(v.price || p.price).toLocaleString() + ' RWF';
-        const image = v.image || p.image;
+        const t = getSelectedType();
+        const image = v.image || (t && t.image) || p.image;
         imageEl.src = image ? 'uploads/' + image : 'https://placehold.co/400x300?text=No+Image';
 
         area.innerHTML = `

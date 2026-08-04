@@ -6,11 +6,13 @@ if (is_logged_in()) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $phone = normalize_phone($_POST['phone'] ?? '');
+    $identifier = trim($_POST['identifier'] ?? '');
     $password = $_POST['password'] ?? '';
+    $isEmail = str_contains($identifier, '@');
+    $lookup = $isEmail ? mb_strtolower($identifier) : normalize_phone($identifier);
 
-    $stmt = mysqli_prepare($conn, 'SELECT id, name, password, role, is_super FROM users WHERE phone = ?');
-    mysqli_stmt_bind_param($stmt, 's', $phone);
+    $stmt = mysqli_prepare($conn, 'SELECT id, name, password, role, is_super FROM users WHERE ' . ($isEmail ? 'email' : 'phone') . ' = ?');
+    mysqli_stmt_bind_param($stmt, 's', $lookup);
     mysqli_stmt_execute($stmt);
     $user = mysqli_stmt_get_result($stmt)->fetch_assoc();
 
@@ -27,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect($redirectUrl);
     }
 
-    $error = 'Invalid phone number or password.';
+    $error = 'Invalid phone/email or password.';
     if (is_ajax()) {
         json_response(['success' => false, 'message' => $error]);
     }
@@ -51,8 +53,8 @@ require_once __DIR__ . '/includes/header.php';
             </div>
             <form method="post" id="loginForm">
                 <div class="mb-3">
-                    <label class="form-label">Phone</label>
-                    <input type="text" name="phone" class="form-control" value="<?= e($_POST['phone'] ?? '') ?>" required autofocus>
+                    <label class="form-label">Phone or Email</label>
+                    <input type="text" name="identifier" class="form-control" value="<?= e($_POST['identifier'] ?? '') ?>" required autofocus>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Password</label>

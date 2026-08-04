@@ -236,11 +236,15 @@ function getSelectedVariant() {
 function renderVariantCartArea() {
     const v = getSelectedVariant();
     if (!v) {
+        const t = getSelectedType();
+        const image = (t && t.image) || parentImage;
+        detailImage.src = image ? 'uploads/' + image : 'https://placehold.co/400x300?text=No+Image';
         variantCartArea.innerHTML = '<p class="text-danger fw-bold">No packages available for this option.</p>';
         return;
     }
     detailPrice.textContent = Number(v.price || basePrice).toLocaleString() + ' RWF';
-    const image = v.image || parentImage;
+    const t = getSelectedType();
+    const image = v.image || (t && t.image) || parentImage;
     detailImage.src = image ? 'uploads/' + image : 'https://placehold.co/400x300?text=No+Image';
 
     variantCartArea.innerHTML = `

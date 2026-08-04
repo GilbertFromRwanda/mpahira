@@ -9,7 +9,8 @@ CREATE TABLE users (
     password VARCHAR(255) NOT NULL,
     role ENUM('customer','admin') NOT NULL DEFAULT 'customer',
     is_super TINYINT(1) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FULLTEXT INDEX ft_users_name (name)
 );
 
 -- A system user (role='admin') only sees the admin modules listed here unless
@@ -43,10 +44,20 @@ CREATE TABLE products (
     price DECIMAL(10,2) NOT NULL DEFAULT 0,
     image VARCHAR(255),
     status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+    -- Denormalized cache of the shop-listing price/flag for top-level products
+    -- (parent_id IS NULL), kept in sync by admin/products.php on every write so
+    -- shop.php can read it directly instead of aggregating variants/packages per row.
+    has_variants TINYINT(1) NOT NULL DEFAULT 0,
+    display_price DECIMAL(10,2) NULL,
+    -- Denormalized "name + variant names + package names + meta values" blob for
+    -- shop.php's search box, so search is one FULLTEXT lookup instead of 3 EXISTS
+    -- subqueries per row. Kept in sync by admin/products.php on every write.
+    search_blob TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
-    FOREIGN KEY (parent_id) REFERENCES products(id) ON DELETE CASCADE
+    FOREIGN KEY (parent_id) REFERENCES products(id) ON DELETE CASCADE,
+    FULLTEXT INDEX ft_products_search_blob (search_blob)
 );
 
 -- product_meta: free-form key/value attributes (e.g. Origin: Rwanda) that also feed search
