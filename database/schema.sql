@@ -134,10 +134,15 @@ CREATE TABLE orders (
     payment_method VARCHAR(50) NOT NULL DEFAULT 'cash',
     payment_proof VARCHAR(255) DEFAULT NULL,
     status ENUM('pending','confirmed','preparing','out_for_delivery','delivered','cancelled') NOT NULL DEFAULT 'pending',
+    -- Admin responsible for handling this order; must have the 'orders'
+    -- permission (or be a super admin) -- enforced in admin/order.php, not here.
+    incharge_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE SET NULL
+    FOREIGN KEY (address_id) REFERENCES addresses(id) ON DELETE SET NULL,
+    FOREIGN KEY (incharge_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_orders_incharge (incharge_id)
 );
 
 CREATE TABLE notifications (
