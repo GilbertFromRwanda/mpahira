@@ -7,7 +7,7 @@ $validStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'deli
 function render_order_rows(array $orders): string
 {
     if (!$orders) {
-        return '<tr><td colspan="7" class="text-center text-muted">No orders found.</td></tr>';
+        return '<tr><td colspan="8" class="text-center text-muted">No orders found.</td></tr>';
     }
 
     ob_start();
@@ -19,6 +19,7 @@ function render_order_rows(array $orders): string
             <td><?= number_format((float) $order['total'] + (float) $order['delivery_fee']) ?><?= $order['delivery_fee_type'] === 'negotiable' ? ' + TBD' : '' ?></td>
             <td><?= e($order['payment_method']) ?></td>
             <td><span class="badge <?= order_status_badge_class($order['status']) ?>"><?= e(str_replace('_', ' ', $order['status'])) ?></span></td>
+            <td><?= $order['incharge_name'] ? e($order['incharge_name']) : '<span class="text-muted">&mdash;</span>' ?></td>
             <td><a href="order?id=<?= (int) $order['id'] ?>" class="btn btn-sm btn-outline-dark">View</a></td>
         </tr>
     <?php endforeach;
@@ -26,9 +27,11 @@ function render_order_rows(array $orders): string
 }
 
 $paymentMethods = mysqli_fetch_all(mysqli_query($conn, 'SELECT name FROM payment_methods ORDER BY name'), MYSQLI_ASSOC);
+$inchargeOptions = fetch_incharge_options($conn);
 
 $statusFilter = $_GET['status'] ?? '';
 $paymentFilter = $_GET['payment_method'] ?? '';
+$inchargeFilter = (int) ($_GET['incharge_id'] ?? 0);
 $customerSearch = trim($_GET['q'] ?? '');
 $startDate = $_GET['start_date'] ?? '';
 $endDate = $_GET['end_date'] ?? '';
@@ -36,9 +39,10 @@ $validDate = fn (string $d): bool => (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', 
 
 $sql = '
     SELECT o.id, o.total, o.delivery_fee, o.delivery_fee_type, o.payment_method, o.status, o.created_at,
-           u.name AS customer_name, u.phone AS customer_phone
+           u.name AS customer_name, u.phone AS customer_phone, i.name AS incharge_name
     FROM orders o
     JOIN users u ON u.id = o.user_id
+    LEFT JOIN users i ON i.id = o.incharge_id
 ';
 $conditions = [];
 $params = [];
@@ -54,6 +58,12 @@ if ($paymentFilter !== '') {
     $conditions[] = 'o.payment_method = ?';
     $types .= 's';
     $params[] = $paymentFilter;
+}
+
+if ($inchargeFilter !== 0 && in_array($inchargeFilter, array_map('intval', array_column($inchargeOptions, 'id')), true)) {
+    $conditions[] = 'o.incharge_id = ?';
+    $types .= 'i';
+    $params[] = $inchargeFilter;
 }
 
 if ($customerSearch !== '') {
@@ -117,6 +127,12 @@ require_once __DIR__ . '/nav.php';
                 <option value="<?= $s ?>" <?= $statusFilter === $s ? 'selected' : '' ?>><?= e(str_replace('_', ' ', $s)) ?></option>
             <?php endforeach; ?>
         </select>
+        <select id="inchargeFilter" class="form-select form-select-sm" style="width:auto;">
+            <option value="">All incharges</option>
+            <?php foreach ($inchargeOptions as $opt): ?>
+                <option value="<?= (int) $opt['id'] ?>" <?= $inchargeFilter === (int) $opt['id'] ? 'selected' : '' ?>><?= e($opt['name']) ?></option>
+            <?php endforeach; ?>
+        </select>
     </div>
 </div>
 
@@ -130,6 +146,7 @@ require_once __DIR__ . '/nav.php';
             <th>Total</th>
             <th>Payment</th>
             <th>Status</th>
+            <th>Incharge</th>
             <th></th>
         </tr>
     </thead>
@@ -141,6 +158,7 @@ require_once __DIR__ . '/nav.php';
 const filterFields = {
     status: document.getElementById('statusFilter'),
     payment_method: document.getElementById('paymentFilter'),
+    incharge_id: document.getElementById('inchargeFilter'),
     q: document.getElementById('customerSearch'),
     start_date: document.getElementById('startDateFilter'),
     end_date: document.getElementById('endDateFilter'),

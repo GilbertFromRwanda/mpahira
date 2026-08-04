@@ -34,9 +34,10 @@ function require_admin(): void
 // Modules a system user can be granted individual access to. Anything not
 // listed here (settings, users, migrations) is super-admin only.
 const PERMISSION_MODULES = [
-    'categories' => 'Categories',
-    'products'   => 'Products',
-    'orders'     => 'Orders',
+    'categories'      => 'Categories',
+    'products'        => 'Products',
+    'orders'          => 'Orders',
+    'assign_incharge' => 'Assign Order Incharge',
 ];
 
 function is_super_admin(): bool
@@ -210,6 +211,17 @@ function fetch_status_history(mysqli $conn, int $orderId): array
     mysqli_stmt_bind_param($stmt, 'i', $orderId);
     mysqli_stmt_execute($stmt);
     return mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+}
+
+// Admins eligible to be assigned as an order's "incharge": super admins and
+// system users explicitly granted the 'orders' module permission.
+function fetch_incharge_options(mysqli $conn): array
+{
+    return mysqli_fetch_all(mysqli_query($conn, "
+        SELECT id, name FROM users
+        WHERE role = 'admin' AND (is_super = 1 OR id IN (SELECT user_id FROM user_permissions WHERE module = 'orders'))
+        ORDER BY name
+    "), MYSQLI_ASSOC);
 }
 
 function order_status_badge_class(string $status): string

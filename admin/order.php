@@ -9,6 +9,10 @@ $orderId = (int) ($_GET['id'] ?? 0);
 $paymentMethodList = mysqli_fetch_all(mysqli_query($conn, 'SELECT name FROM payment_methods ORDER BY name'), MYSQLI_ASSOC);
 $paymentMethodNames = array_column($paymentMethodList, 'name');
 
+$inchargeOptions = fetch_incharge_options($conn);
+$inchargeIds = array_map('intval', array_column($inchargeOptions, 'id'));
+$canAssignIncharge = has_permission('assign_incharge');
+
 function render_status_history(array $rows): string
 {
     if (!$rows) {
@@ -88,12 +92,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_method'])) {
     redirect('order?id=' . $orderId);
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['incharge_id'])) {
+    $inchargeId = (int) $_POST['incharge_id'];
+    $success = false;
+    $message = 'Invalid incharge.';
+
+    if (!has_permission('assign_incharge')) {
+        $message = "You don't have permission to assign incharge.";
+    } elseif ($inchargeId === 0) {
+        $stmt = mysqli_prepare($conn, 'UPDATE orders SET incharge_id = NULL WHERE id = ?');
+        mysqli_stmt_bind_param($stmt, 'i', $orderId);
+        mysqli_stmt_execute($stmt);
+        $success = true;
+        $message = 'Incharge updated.';
+    } elseif (in_array($inchargeId, $inchargeIds, true)) {
+        $stmt = mysqli_prepare($conn, 'UPDATE orders SET incharge_id = ? WHERE id = ?');
+        mysqli_stmt_bind_param($stmt, 'ii', $inchargeId, $orderId);
+        mysqli_stmt_execute($stmt);
+        $success = true;
+        $message = 'Incharge updated.';
+    }
+
+    if (is_ajax()) {
+        json_response([
+            'success' => $success,
+            'message' => $message,
+        ]);
+    }
+
+    flash_set($success ? 'success' : 'danger', $message);
+    redirect('order?id=' . $orderId);
+}
+
 $stmt = mysqli_prepare($conn, '
     SELECT o.*, u.name AS customer_name, u.phone AS customer_phone, u.email AS customer_email,
-           a.province, a.district, a.sector, a.cell, a.village, a.address, a.phone AS address_phone
+           a.province, a.district, a.sector, a.cell, a.village, a.address, a.phone AS address_phone,
+           i.name AS incharge_name
     FROM orders o
     JOIN users u ON u.id = o.user_id
     LEFT JOIN addresses a ON a.id = o.address_id
+    LEFT JOIN users i ON i.id = o.incharge_id
     WHERE o.id = ?
 ');
 mysqli_stmt_bind_param($stmt, 'i', $orderId);
@@ -213,6 +251,23 @@ require_once __DIR__ . '/nav.php';
         </div>
 
         <div class="card p-3 mb-3">
+            <h5>Incharge</h5>
+            <?php if ($canAssignIncharge): ?>
+                <form id="inchargeForm" class="d-flex gap-2">
+                    <select name="incharge_id" class="form-select">
+                        <option value="0"><?= $order['incharge_id'] ? 'Unassign' : 'Unassigned' ?></option>
+                        <?php foreach ($inchargeOptions as $opt): ?>
+                            <option value="<?= (int) $opt['id'] ?>" <?= (int) $order['incharge_id'] === (int) $opt['id'] ? 'selected' : '' ?>><?= e($opt['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="submit" class="btn btn-dark">Update</button>
+                </form>
+            <?php else: ?>
+                <p class="mb-0"><?= $order['incharge_name'] ? e($order['incharge_name']) : '<span class="text-muted">Unassigned</span>' ?></p>
+            <?php endif; ?>
+        </div>
+
+        <div class="card p-3 mb-3">
             <h5>Status</h5>
             <form id="statusForm">
                 <select name="status" id="statusFormSelect" class="form-select mb-2">
@@ -284,6 +339,19 @@ document.getElementById('statusForm').addEventListener('submit', function (e) {
 });
 
 document.getElementById('paymentForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const form = this;
+    const restore = setFormLoading(form, 'Updating…');
+    postAjax(window.location.pathname + window.location.search, new FormData(form)).then(res => {
+        restore();
+        showToast(res.success ? 'success' : 'danger', res.message);
+    }).catch(() => {
+        restore();
+        showToast('danger', 'Network error. Please try again.');
+    });
+});
+
+document.getElementById('inchargeForm')?.addEventListener('submit', function (e) {
     e.preventDefault();
     const form = this;
     const restore = setFormLoading(form, 'Updating…');
