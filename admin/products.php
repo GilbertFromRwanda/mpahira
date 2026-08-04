@@ -57,6 +57,69 @@ function collect_descendant_ids(mysqli $conn, int $id): array
     return $ids;
 }
 
+// Walks parent_id up from any product/variant/package id to its top-level ancestor.
+function get_top_level_id(mysqli $conn, int $id): int
+{
+    while (true) {
+        $row = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT parent_id FROM products WHERE id = ' . $id));
+        if (!$row || $row['parent_id'] === null) {
+            return $id;
+        }
+        $id = (int) $row['parent_id'];
+    }
+}
+
+// Recomputes and persists the has_variants/display_price/search_blob cache shop.php reads
+// for one top-level product id, using the same aggregation shop.php used to run live.
+function recompute_product_cache(mysqli $conn, int $id): void
+{
+    $stmt = mysqli_prepare($conn, '
+        SELECT
+            EXISTS (SELECT 1 FROM products v WHERE v.parent_id = p.id AND v.status = "active") AS has_variants,
+            COALESCE(
+                NULLIF(
+                    LEAST(
+                        COALESCE(
+                            (SELECT MIN(v.price) FROM products v
+                             WHERE v.parent_id = p.id AND v.status = "active"
+                               AND NOT EXISTS (SELECT 1 FROM products g WHERE g.parent_id = v.id AND g.status = "active")),
+                            999999999.99
+                        ),
+                        COALESCE(
+                            (SELECT MIN(g.price) FROM products v
+                             JOIN products g ON g.parent_id = v.id
+                             WHERE v.parent_id = p.id AND v.status = "active" AND g.status = "active"),
+                            999999999.99
+                        )
+                    ),
+                    999999999.99
+                ),
+                p.price
+            ) AS display_price,
+            CONCAT_WS(" ",
+                p.name,
+                (SELECT GROUP_CONCAT(v.name SEPARATOR " ") FROM products v WHERE v.parent_id = p.id),
+                (SELECT GROUP_CONCAT(g.name SEPARATOR " ") FROM products v JOIN products g ON g.parent_id = v.id WHERE v.parent_id = p.id),
+                (SELECT GROUP_CONCAT(pm.meta_value SEPARATOR " ") FROM product_meta pm WHERE pm.product_id = p.id)
+            ) AS search_blob
+        FROM products p
+        WHERE p.id = ?
+    ');
+    mysqli_stmt_bind_param($stmt, 'i', $id);
+    mysqli_stmt_execute($stmt);
+    $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+    if (!$row) {
+        return;
+    }
+
+    $hasVariants = (int) $row['has_variants'];
+    $displayPrice = (float) $row['display_price'];
+    $searchBlob = (string) $row['search_blob'];
+    $update = mysqli_prepare($conn, 'UPDATE products SET has_variants = ?, display_price = ?, search_blob = ? WHERE id = ?');
+    mysqli_stmt_bind_param($update, 'idsi', $hasVariants, $displayPrice, $searchBlob, $id);
+    mysqli_stmt_execute($update);
+}
+
 function fetch_products(mysqli $conn): array
 {
     $result = mysqli_query($conn, '
@@ -224,7 +287,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = mysqli_prepare($conn, 'INSERT INTO products (category_id, name, description, price, image, status) VALUES (?, ?, ?, ?, ?, ?)');
             mysqli_stmt_bind_param($stmt, 'issdss', $categoryId, $name, $description, $price, $uploadedImage, $status);
             mysqli_stmt_execute($stmt);
-            save_meta($conn, (int) mysqli_insert_id($conn), $metaRows);
+            $newId = (int) mysqli_insert_id($conn);
+            save_meta($conn, $newId, $metaRows);
+            recompute_product_cache($conn, $newId);
             $message = 'Product added.';
         } else {
             if ($uploadedImage) {
@@ -240,15 +305,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             mysqli_stmt_execute($stmt);
             save_meta($conn, $id, $metaRows);
+            recompute_product_cache($conn, $id);
             $message = 'Product updated.';
         }
     } elseif ($action === 'add_variant' || $action === 'edit_variant') {
         // A variant: just a name, grouping packages under a top-level product.
         $name = trim($_POST['name'] ?? '');
+        [$uploadedImage, $uploadError] = handle_image_upload($_FILES['image'] ?? ['error' => UPLOAD_ERR_NO_FILE]);
 
         if ($name === '') {
             $type = 'danger';
             $message = 'Name is required.';
+        } elseif ($uploadError) {
+            $type = 'danger';
+            $message = $uploadError;
         } elseif ($action === 'add_variant') {
             $parentId = (int) ($_POST['parent_id'] ?? 0);
             if (get_depth($conn, $parentId) !== 0) {
@@ -257,9 +327,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $parentRow = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT category_id FROM products WHERE id = ' . $parentId));
                 $categoryId = $parentRow['category_id'] !== null ? (int) $parentRow['category_id'] : null;
-                $stmt = mysqli_prepare($conn, 'INSERT INTO products (category_id, parent_id, name, price, status) VALUES (?, ?, ?, 0, "active")');
-                mysqli_stmt_bind_param($stmt, 'iis', $categoryId, $parentId, $name);
+                $stmt = mysqli_prepare($conn, 'INSERT INTO products (category_id, parent_id, name, price, image, status) VALUES (?, ?, ?, 0, ?, "active")');
+                mysqli_stmt_bind_param($stmt, 'iiss', $categoryId, $parentId, $name, $uploadedImage);
                 mysqli_stmt_execute($stmt);
+                recompute_product_cache($conn, $parentId);
                 $message = 'Variant added.';
             }
         } else {
@@ -268,9 +339,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $type = 'danger';
                 $message = 'Invalid variant.';
             } else {
-                $stmt = mysqli_prepare($conn, 'UPDATE products SET name = ? WHERE id = ?');
-                mysqli_stmt_bind_param($stmt, 'si', $name, $id);
+                if ($uploadedImage) {
+                    $old = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT image FROM products WHERE id = ' . $id));
+                    if (!empty($old['image']) && is_file(UPLOAD_DIR . $old['image'])) {
+                        unlink(UPLOAD_DIR . $old['image']);
+                    }
+                    $stmt = mysqli_prepare($conn, 'UPDATE products SET name = ?, image = ? WHERE id = ?');
+                    mysqli_stmt_bind_param($stmt, 'ssi', $name, $uploadedImage, $id);
+                } else {
+                    $stmt = mysqli_prepare($conn, 'UPDATE products SET name = ? WHERE id = ?');
+                    mysqli_stmt_bind_param($stmt, 'si', $name, $id);
+                }
                 mysqli_stmt_execute($stmt);
+                recompute_product_cache($conn, get_top_level_id($conn, $id));
                 $message = 'Variant updated.';
             }
         }
@@ -278,10 +359,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // A package: the actual purchasable item, with its own name and price.
         $name = trim($_POST['name'] ?? '');
         $price = (float) ($_POST['price'] ?? 0);
+        [$uploadedImage, $uploadError] = handle_image_upload($_FILES['image'] ?? ['error' => UPLOAD_ERR_NO_FILE]);
 
         if ($name === '' || $price < 0) {
             $type = 'danger';
             $message = 'Name and price are required and must be valid.';
+        } elseif ($uploadError) {
+            $type = 'danger';
+            $message = $uploadError;
         } elseif ($action === 'add_package') {
             $parentId = (int) ($_POST['parent_id'] ?? 0);
             if (get_depth($conn, $parentId) !== 1) {
@@ -290,9 +375,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $parentRow = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT category_id FROM products WHERE id = ' . $parentId));
                 $categoryId = $parentRow['category_id'] !== null ? (int) $parentRow['category_id'] : null;
-                $stmt = mysqli_prepare($conn, 'INSERT INTO products (category_id, parent_id, name, price, status) VALUES (?, ?, ?, ?, "active")');
-                mysqli_stmt_bind_param($stmt, 'iisd', $categoryId, $parentId, $name, $price);
+                $stmt = mysqli_prepare($conn, 'INSERT INTO products (category_id, parent_id, name, price, image, status) VALUES (?, ?, ?, ?, ?, "active")');
+                mysqli_stmt_bind_param($stmt, 'iisds', $categoryId, $parentId, $name, $price, $uploadedImage);
                 mysqli_stmt_execute($stmt);
+                recompute_product_cache($conn, get_top_level_id($conn, $parentId));
                 $message = 'Package added.';
             }
         } else {
@@ -303,9 +389,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $type = 'danger';
                 $message = 'Invalid package.';
             } else {
-                $stmt = mysqli_prepare($conn, 'UPDATE products SET name = ?, price = ? WHERE id = ?');
-                mysqli_stmt_bind_param($stmt, 'sdi', $name, $price, $id);
+                if ($uploadedImage) {
+                    $old = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT image FROM products WHERE id = ' . $id));
+                    if (!empty($old['image']) && is_file(UPLOAD_DIR . $old['image'])) {
+                        unlink(UPLOAD_DIR . $old['image']);
+                    }
+                    $stmt = mysqli_prepare($conn, 'UPDATE products SET name = ?, price = ?, image = ? WHERE id = ?');
+                    mysqli_stmt_bind_param($stmt, 'sdsi', $name, $price, $uploadedImage, $id);
+                } else {
+                    $stmt = mysqli_prepare($conn, 'UPDATE products SET name = ?, price = ? WHERE id = ?');
+                    mysqli_stmt_bind_param($stmt, 'sdi', $name, $price, $id);
+                }
                 mysqli_stmt_execute($stmt);
+                recompute_product_cache($conn, get_top_level_id($conn, $id));
                 $message = 'Package updated.';
             }
         }
@@ -318,6 +414,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $type = 'danger';
             $message = 'Cannot delete: this item (or one of its variants/packages) has order history. Set it to inactive instead.';
         } else {
+            $parentRow = mysqli_fetch_assoc(mysqli_query($conn, 'SELECT parent_id FROM products WHERE id = ' . $id));
+            $affectedTopId = ($parentRow && $parentRow['parent_id'] !== null)
+                ? get_top_level_id($conn, (int) $parentRow['parent_id'])
+                : null;
+
             $imagesResult = mysqli_query($conn, 'SELECT image FROM products WHERE id IN (' . $idList . ')');
             while ($row = mysqli_fetch_assoc($imagesResult)) {
                 if (!empty($row['image']) && is_file(UPLOAD_DIR . $row['image'])) {
@@ -327,6 +428,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = mysqli_prepare($conn, 'DELETE FROM products WHERE id = ?');
             mysqli_stmt_bind_param($stmt, 'i', $id);
             mysqli_stmt_execute($stmt);
+            if ($affectedTopId !== null) {
+                recompute_product_cache($conn, $affectedTopId);
+            }
             $message = 'Deleted.';
         }
     }
@@ -458,13 +562,18 @@ require_once __DIR__ . '/nav.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="variantForm">
+                <form id="variantForm" enctype="multipart/form-data">
                     <input type="hidden" name="action" id="variantFormAction" value="add_variant">
                     <input type="hidden" name="id" id="variantFormId" value="">
                     <input type="hidden" name="parent_id" id="variantFormParentId" value="">
                     <div class="mb-3">
                         <label class="form-label">Name <small class="text-muted fw-normal">(e.g. Red)</small></label>
                         <input type="text" name="name" id="variantFormName" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" id="variantFormImageLabel">Image</label>
+                        <input type="file" name="image" class="form-control" accept=".jpg,.jpeg,.png,.gif,.webp">
+                        <img id="variantFormImagePreview" class="mt-2 d-none" style="height:80px;object-fit:cover;">
                     </div>
                     <button type="submit" class="btn btn-dark w-100" id="variantFormSubmitBtn">Add</button>
                 </form>
@@ -481,7 +590,7 @@ require_once __DIR__ . '/nav.php';
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="packageForm">
+                <form id="packageForm" enctype="multipart/form-data">
                     <input type="hidden" name="action" id="packageFormAction" value="add_package">
                     <input type="hidden" name="id" id="packageFormId" value="">
                     <input type="hidden" name="parent_id" id="packageFormParentId" value="">
@@ -492,6 +601,11 @@ require_once __DIR__ . '/nav.php';
                     <div class="mb-3">
                         <label class="form-label">Price (RWF)</label>
                         <input type="number" step="0.01" min="0" name="price" id="packageFormPrice" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" id="packageFormImageLabel">Image</label>
+                        <input type="file" name="image" class="form-control" accept=".jpg,.jpeg,.png,.gif,.webp">
+                        <img id="packageFormImagePreview" class="mt-2 d-none" style="height:80px;object-fit:cover;">
                     </div>
                     <button type="submit" class="btn btn-dark w-100" id="packageFormSubmitBtn">Add</button>
                 </form>
@@ -550,6 +664,8 @@ function resetVariantForm() {
     document.getElementById('variantFormParentId').value = '';
     document.getElementById('variantFormTitle').textContent = 'Add Variant';
     document.getElementById('variantFormSubmitBtn').textContent = 'Add';
+    document.getElementById('variantFormImageLabel').textContent = 'Image';
+    document.getElementById('variantFormImagePreview').classList.add('d-none');
 }
 
 function resetPackageForm() {
@@ -559,6 +675,8 @@ function resetPackageForm() {
     document.getElementById('packageFormParentId').value = '';
     document.getElementById('packageFormTitle').textContent = 'Add Package';
     document.getElementById('packageFormSubmitBtn').textContent = 'Add';
+    document.getElementById('packageFormImageLabel').textContent = 'Image';
+    document.getElementById('packageFormImagePreview').classList.add('d-none');
 }
 
 document.getElementById('openAddModalBtn').addEventListener('click', resetForm);
@@ -629,6 +747,15 @@ document.getElementById('productRows').addEventListener('click', function (e) {
             document.getElementById('variantFormName').value = p.name;
             document.getElementById('variantFormTitle').textContent = 'Edit Variant';
             document.getElementById('variantFormSubmitBtn').textContent = 'Update';
+            document.getElementById('variantFormImageLabel').textContent = 'Image (leave blank to keep current)';
+
+            const variantPreview = document.getElementById('variantFormImagePreview');
+            if (p.image) {
+                variantPreview.src = '../uploads/' + p.image;
+                variantPreview.classList.remove('d-none');
+            } else {
+                variantPreview.classList.add('d-none');
+            }
             variantModal.show();
         } else {
             document.getElementById('packageFormAction').value = 'edit_package';
@@ -637,6 +764,15 @@ document.getElementById('productRows').addEventListener('click', function (e) {
             document.getElementById('packageFormPrice').value = p.price;
             document.getElementById('packageFormTitle').textContent = 'Edit Package';
             document.getElementById('packageFormSubmitBtn').textContent = 'Update';
+            document.getElementById('packageFormImageLabel').textContent = 'Image (leave blank to keep current)';
+
+            const packagePreview = document.getElementById('packageFormImagePreview');
+            if (p.image) {
+                packagePreview.src = '../uploads/' + p.image;
+                packagePreview.classList.remove('d-none');
+            } else {
+                packagePreview.classList.add('d-none');
+            }
             packageModal.show();
         }
     }

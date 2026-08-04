@@ -25,7 +25,14 @@ function render_order_rows(array $orders): string
     return ob_get_clean();
 }
 
+$paymentMethods = mysqli_fetch_all(mysqli_query($conn, 'SELECT name FROM payment_methods ORDER BY name'), MYSQLI_ASSOC);
+
 $statusFilter = $_GET['status'] ?? '';
+$paymentFilter = $_GET['payment_method'] ?? '';
+$customerSearch = trim($_GET['q'] ?? '');
+$startDate = $_GET['start_date'] ?? '';
+$endDate = $_GET['end_date'] ?? '';
+$validDate = fn (string $d): bool => (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', $d);
 
 $sql = '
     SELECT o.id, o.total, o.delivery_fee, o.delivery_fee_type, o.payment_method, o.status, o.created_at,
@@ -33,13 +40,45 @@ $sql = '
     FROM orders o
     JOIN users u ON u.id = o.user_id
 ';
+$conditions = [];
 $params = [];
 $types = '';
 
 if (in_array($statusFilter, $validStatuses, true)) {
-    $sql .= ' WHERE o.status = ?';
+    $conditions[] = 'o.status = ?';
     $types .= 's';
     $params[] = $statusFilter;
+}
+
+if ($paymentFilter !== '') {
+    $conditions[] = 'o.payment_method = ?';
+    $types .= 's';
+    $params[] = $paymentFilter;
+}
+
+if ($customerSearch !== '') {
+    $booleanSearch = build_fulltext_boolean_query($customerSearch);
+    if ($booleanSearch !== '') {
+        $conditions[] = 'MATCH (u.name) AGAINST (? IN BOOLEAN MODE)';
+        $types .= 's';
+        $params[] = $booleanSearch;
+    }
+}
+
+if ($startDate !== '' && $validDate($startDate)) {
+    $conditions[] = 'o.created_at >= ?';
+    $types .= 's';
+    $params[] = $startDate;
+}
+
+if ($endDate !== '' && $validDate($endDate)) {
+    $conditions[] = 'o.created_at < DATE_ADD(?, INTERVAL 1 DAY)';
+    $types .= 's';
+    $params[] = $endDate;
+}
+
+if ($conditions) {
+    $sql .= ' WHERE ' . implode(' AND ', $conditions);
 }
 
 $sql .= ' ORDER BY o.created_at DESC';
@@ -62,12 +101,23 @@ require_once __DIR__ . '/nav.php';
 
 <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
     <h5 class="mb-0">All Orders</h5>
-    <select id="statusFilter" class="form-select form-select-sm" style="width:auto;">
-        <option value="">All statuses</option>
-        <?php foreach ($validStatuses as $s): ?>
-            <option value="<?= $s ?>" <?= $statusFilter === $s ? 'selected' : '' ?>><?= e(str_replace('_', ' ', $s)) ?></option>
-        <?php endforeach; ?>
-    </select>
+    <div class="d-flex gap-2 flex-wrap">
+        <input type="text" id="customerSearch" class="form-control form-control-sm" style="width:auto;" placeholder="Search customer..." value="<?= e($customerSearch) ?>">
+        <input type="date" id="startDateFilter" class="form-control form-control-sm" style="width:auto;" value="<?= e($startDate) ?>">
+        <input type="date" id="endDateFilter" class="form-control form-control-sm" style="width:auto;" value="<?= e($endDate) ?>">
+        <select id="paymentFilter" class="form-select form-select-sm" style="width:auto;">
+            <option value="">All payment methods</option>
+            <?php foreach ($paymentMethods as $m): ?>
+                <option value="<?= e($m['name']) ?>" <?= $paymentFilter === $m['name'] ? 'selected' : '' ?>><?= e($m['name']) ?></option>
+            <?php endforeach; ?>
+        </select>
+        <select id="statusFilter" class="form-select form-select-sm" style="width:auto;">
+            <option value="">All statuses</option>
+            <?php foreach ($validStatuses as $s): ?>
+                <option value="<?= $s ?>" <?= $statusFilter === $s ? 'selected' : '' ?>><?= e(str_replace('_', ' ', $s)) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
 </div>
 
 <div class="table-responsive">
@@ -88,14 +138,38 @@ require_once __DIR__ . '/nav.php';
 </div>
 
 <script>
-document.getElementById('statusFilter').addEventListener('change', function () {
-    const status = this.value;
-    const url = window.location.pathname + (status ? '?status=' + encodeURIComponent(status) : '');
+const filterFields = {
+    status: document.getElementById('statusFilter'),
+    payment_method: document.getElementById('paymentFilter'),
+    q: document.getElementById('customerSearch'),
+    start_date: document.getElementById('startDateFilter'),
+    end_date: document.getElementById('endDateFilter'),
+};
+
+function applyFilters() {
+    const params = new URLSearchParams();
+    for (const [key, el] of Object.entries(filterFields)) {
+        if (el.value) params.set(key, el.value);
+    }
+    const query = params.toString();
+    const url = window.location.pathname + (query ? '?' + query : '');
     window.history.pushState({}, '', url);
     getAjax(url).then(res => {
         document.getElementById('orderRows').innerHTML = res.html;
     });
-});
+}
+
+let filterDebounce;
+for (const [key, el] of Object.entries(filterFields)) {
+    if (el.tagName === 'SELECT') {
+        el.addEventListener('change', applyFilters);
+    } else {
+        el.addEventListener('input', function () {
+            clearTimeout(filterDebounce);
+            filterDebounce = setTimeout(applyFilters, 350);
+        });
+    }
+}
 </script>
 
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

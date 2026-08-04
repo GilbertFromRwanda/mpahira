@@ -49,9 +49,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$errors) {
         $hash = password_hash($password, PASSWORD_DEFAULT);
-        // email is UNIQUE — must be stored as NULL (not '') so multiple
-        // no-email signups don't collide on an empty-string duplicate.
-        $emailToStore = $email !== '' ? $email : null;
+        // No email given: fall back to phone@gmail.com. Phone is already
+        // unique, so this can't collide with another user's stored email.
+        $emailToStore = $email !== '' ? $email : $phone . '@gmail.com';
         $stmt = mysqli_prepare($conn, 'INSERT INTO users (name, phone, email, password, role) VALUES (?, ?, ?, ?, "customer")');
         mysqli_stmt_bind_param($stmt, 'ssss', $name, $phone, $emailToStore, $hash);
 
