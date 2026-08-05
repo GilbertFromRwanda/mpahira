@@ -40,9 +40,10 @@ function render_cart(mysqli $conn, array $rows): string
         return '<p class="text-muted">Your cart is empty. <a href="shop">Browse products</a>.</p>';
     }
 
+    $showPrice = get_setting($conn, 'show_price', '1') === '1';
     $subtotal = array_sum(array_column($rows, 'line_total'));
     $minOrderTotal = (float) get_setting($conn, 'min_order_total', '0');
-    $belowMinimum = $minOrderTotal > 0 && $subtotal < $minOrderTotal;
+    $belowMinimum = $showPrice && $minOrderTotal > 0 && $subtotal < $minOrderTotal;
 
     ob_start();
     ?>
@@ -52,9 +53,13 @@ function render_cart(mysqli $conn, array $rows): string
                 <tr>
                     <th></th>
                     <th>Product</th>
-                    <th>Price</th>
+                    <?php if ($showPrice): ?>
+                        <th>Price</th>
+                    <?php endif; ?>
                     <th>Quantity</th>
-                    <th>Subtotal</th>
+                    <?php if ($showPrice): ?>
+                        <th>Subtotal</th>
+                    <?php endif; ?>
                     <th></th>
                 </tr>
             </thead>
@@ -65,14 +70,18 @@ function render_cart(mysqli $conn, array $rows): string
                             <img src="<?= $item['display_image'] ? 'uploads/' . e($item['display_image']) : 'https://placehold.co/60x60?text=No+Img' ?>" style="width:48px;height:48px;object-fit:cover;" loading="lazy">
                         </td>
                         <td><?= e($item['display_name']) ?></td>
-                        <td><?= number_format((float) $item['price']) ?></td>
+                        <?php if ($showPrice): ?>
+                            <td><?= number_format((float) $item['price']) ?></td>
+                        <?php endif; ?>
                         <td>
                             <form class="d-flex gap-1 cart-update-form" data-item-id="<?= (int) $item['id'] ?>">
                                 <input type="number" name="quantity" value="<?= (int) $item['quantity'] ?>" min="1" class="form-control form-control-sm" style="width:70px;">
                                 <button type="submit" class="btn btn-sm btn-outline-dark">Update</button>
                             </form>
                         </td>
-                        <td class="line-total"><?= number_format($item['line_total']) ?></td>
+                        <?php if ($showPrice): ?>
+                            <td class="line-total"><?= number_format($item['line_total']) ?></td>
+                        <?php endif; ?>
                         <td>
                             <button type="button" class="btn btn-sm btn-outline-danger cart-remove-btn" data-item-id="<?= (int) $item['id'] ?>">Remove</button>
                         </td>
@@ -84,7 +93,9 @@ function render_cart(mysqli $conn, array $rows): string
 
     <div class="d-flex justify-content-end">
         <div class="text-end">
-            <p class="mb-1">Subtotal: <strong><?= number_format($subtotal) ?> RWF</strong></p>
+            <?php if ($showPrice): ?>
+                <p class="mb-1">Subtotal: <strong><?= number_format($subtotal) ?> RWF</strong></p>
+            <?php endif; ?>
             <p class="text-muted small">Delivery fee calculated at checkout</p>
             <?php if ($belowMinimum): ?>
                 <p class="text-danger small mb-2">Minimum order is <?= number_format($minOrderTotal) ?> RWF. Add <?= number_format($minOrderTotal - $subtotal) ?> RWF more to checkout.</p>
@@ -117,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_response([
             'success' => true,
             'html' => render_cart($conn, fetch_cart_rows($conn, $cartId)),
-            'cart_total' => cart_total_amount($conn, $userId),
+            'cart_total' => cart_badge_value($conn, $userId),
         ]);
     }
 
