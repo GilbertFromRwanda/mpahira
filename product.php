@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
         json_response([
             'success' => true,
             'message' => $message,
-            'cart_total' => cart_total_amount($conn, (int) $_SESSION['user_id']),
+            'cart_total' => cart_badge_value($conn, (int) $_SESSION['user_id']),
         ]);
     }
 
