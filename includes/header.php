@@ -1,7 +1,7 @@
 <?php
 global $conn;
 
-$cartTotal = is_logged_in() ? cart_total_amount($conn, (int) $_SESSION['user_id']) : 0;
+$cartTotal = is_logged_in() ? cart_badge_value($conn, (int) $_SESSION['user_id']) : 0;
 $base = relative_base();
 $isAdminPage = strpos($_SERVER['SCRIPT_NAME'], '/admin/') !== false;
 $current = basename($_SERVER['SCRIPT_NAME'], '.php');
@@ -27,9 +27,10 @@ $current = basename($_SERVER['SCRIPT_NAME'], '.php');
     <link href="<?= $base ?>assets/css/style.css?v=<?= filemtime(__DIR__ . '/../assets/css/style.css') ?>" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="<?= $base ?>assets/js/app.js?v=<?= filemtime(__DIR__ . '/../assets/js/app.js') ?>"></script>
-    <?php if (is_admin()): ?>
+    <?php if (is_logged_in()): ?>
         <script>
             window.__ADMIN_NOTIFY_BASE = <?= json_encode($isAdminPage ? '' : $base . 'admin/') ?>;
+            window.__NOTIFY_ORDER_BASE = <?= json_encode(is_admin() ? ($isAdminPage ? '' : $base . 'admin/') : $base) ?>;
             window.__SITE_BASE = <?= json_encode($base) ?>;
         </script>
         <script src="<?= $base ?>assets/js/admin-notify.js?v=<?= filemtime(__DIR__ . '/../assets/js/admin-notify.js') ?>" defer></script>
@@ -71,19 +72,19 @@ $current = basename($_SERVER['SCRIPT_NAME'], '.php');
                         <a class="nav-link <?= $current === 'cart' ? 'active' : '' ?>" href="<?= $base ?>cart">Cart <span class="cart-badge badge bg-primary rounded-pill <?= $cartTotal > 0 ? '' : 'd-none' ?>"><?= number_format($cartTotal) ?></span></a>
                     </li>
                     <li class="nav-item"><a class="nav-link <?= !$isAdminPage && in_array($current, ['orders', 'order'], true) ? 'active' : '' ?>" href="<?= $base ?>orders">My Orders</a></li>
-                    <?php if (is_admin()): ?>
-                        <li class="nav-item nav-notif-wrap" id="navNotifWrap">
-                            <button type="button" class="nav-link nav-notif" id="navNotifBell" title="Notifications">
-                                &#128276;
-                                <span class="nav-notif-badge" id="navNotifBadge" style="display:none;">0</span>
-                            </button>
-                            <div class="nav-notif-panel" id="navNotifPanel">
-                                <div class="nav-notif-panel-hdr">Notifications</div>
-                                <div class="nav-notif-list" id="navNotifList">
-                                    <div class="nav-notif-empty">No notifications</div>
-                                </div>
+                    <li class="nav-item nav-notif-wrap" id="navNotifWrap">
+                        <button type="button" class="nav-link nav-notif" id="navNotifBell" title="Notifications">
+                            &#128276;
+                            <span class="nav-notif-badge" id="navNotifBadge" style="display:none;">0</span>
+                        </button>
+                        <div class="nav-notif-panel" id="navNotifPanel">
+                            <div class="nav-notif-panel-hdr">Notifications</div>
+                            <div class="nav-notif-list" id="navNotifList">
+                                <div class="nav-notif-empty">No notifications</div>
                             </div>
-                        </li>
+                        </div>
+                    </li>
+                    <?php if (is_admin()): ?>
                         <li class="nav-item"><a class="nav-link <?= $isAdminPage ? 'active' : '' ?>" href="<?= $base ?>admin/dashboard">Admin</a></li>
                     <?php endif; ?>
                     <li class="nav-item"><a class="nav-link" href="<?= $base ?>logout">Logout (<?= e($_SESSION['name']) ?>)</a></li>

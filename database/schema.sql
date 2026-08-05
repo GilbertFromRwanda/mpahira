@@ -133,6 +133,10 @@ CREATE TABLE orders (
     delivery_fee_type ENUM('fixed','negotiable') NOT NULL DEFAULT 'fixed',
     payment_method VARCHAR(50) NOT NULL DEFAULT 'cash',
     payment_proof VARCHAR(255) DEFAULT NULL,
+    -- Lets a user with the 'reveal_price' permission show this specific order's
+    -- pricing to the customer even while show_price is off store-wide and the
+    -- order is still pending -- enforced in admin/order.php, not here.
+    price_shown TINYINT(1) NOT NULL DEFAULT 0,
     status ENUM('pending','confirmed','preparing','out_for_delivery','delivered','cancelled') NOT NULL DEFAULT 'pending',
     -- Admin responsible for handling this order; must have the 'orders'
     -- permission (or be a super admin) -- enforced in admin/order.php, not here.
