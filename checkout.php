@@ -2,36 +2,6 @@
 require_once __DIR__ . '/config/database.php';
 require_login();
 
-const PAYMENT_PROOF_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
-const PAYMENT_PROOF_MAX_BYTES = 3 * 1024 * 1024;
-
-function handle_payment_proof_upload(array $file): array
-{
-    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
-        return [null, null];
-    }
-    if ($file['error'] !== UPLOAD_ERR_OK) {
-        return [null, 'Payment proof upload failed.'];
-    }
-    if ($file['size'] > PAYMENT_PROOF_MAX_BYTES) {
-        return [null, 'Payment proof must be smaller than 3MB.'];
-    }
-    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, PAYMENT_PROOF_EXT, true)) {
-        return [null, 'Payment proof must be jpg, png, gif, webp or pdf.'];
-    }
-    $subdir = date('Y') . '/' . date('m');
-    $dir = __DIR__ . '/uploads/payment_proofs/' . $subdir;
-    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
-        return [null, 'Could not save payment proof.'];
-    }
-    $filename = uniqid('proof_', true) . '.' . $ext;
-    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $filename)) {
-        return [null, 'Could not save payment proof.'];
-    }
-    return ['payment_proofs/' . $subdir . '/' . $filename, null];
-}
-
 $userId = (int) $_SESSION['user_id'];
 $cartId = get_or_create_cart($conn, $userId);
 
@@ -55,9 +25,10 @@ if (!$cartItems) {
 }
 
 $subtotal = array_sum(array_map(fn ($i) => $i['price'] * $i['quantity'], $cartItems));
+$showPrice = get_setting($conn, 'show_price', '1') === '1';
 
 $minOrderTotal = (float) get_setting($conn, 'min_order_total', '0');
-if ($minOrderTotal > 0 && $subtotal < $minOrderTotal && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+if ($showPrice && $minOrderTotal > 0 && $subtotal < $minOrderTotal && $_SERVER['REQUEST_METHOD'] !== 'POST') {
     flash_set('danger', 'Minimum order is ' . number_format($minOrderTotal) . ' RWF. Add ' . number_format($minOrderTotal - $subtotal) . ' RWF more to your cart to checkout.');
     redirect('cart');
 }
@@ -98,14 +69,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Please choose a valid payment method.';
     }
 
-    if ($minOrderTotal > 0 && $subtotal < $minOrderTotal) {
+    if ($showPrice && $minOrderTotal > 0 && $subtotal < $minOrderTotal) {
         $errors[] = 'Minimum order is ' . number_format($minOrderTotal) . ' RWF. Add ' . number_format($minOrderTotal - $subtotal) . ' RWF more to your cart to checkout.';
     }
 
     [$paymentProof, $proofError] = handle_payment_proof_upload($_FILES['payment_proof'] ?? ['error' => UPLOAD_ERR_NO_FILE]);
     if ($proofError) {
         $errors[] = $proofError;
-    } elseif ($validPaymentMethod && (int) $validPaymentMethod['requires_proof'] === 1 && !$paymentProof) {
+    } elseif ($showPrice && $validPaymentMethod && (int) $validPaymentMethod['requires_proof'] === 1 && !$paymentProof) {
         $errors[] = 'Please upload proof of payment for ' . $validPaymentMethod['name'] . '.';
     }
 
@@ -294,21 +265,30 @@ require_once __DIR__ . '/includes/header.php';
             <?php foreach ($cartItems as $item): ?>
                 <div class="d-flex justify-content-between">
                     <span><?= e($item['display_name']) ?> x<?= (int) $item['quantity'] ?></span>
-                    <span><?= number_format($item['price'] * $item['quantity']) ?></span>
+                    <?php if ($showPrice): ?>
+                        <span><?= number_format($item['price'] * $item['quantity']) ?></span>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
             <hr>
-            <div class="d-flex justify-content-between"><span>Subtotal</span><span id="summarySubtotal"><?= number_format($subtotal) ?></span></div>
-            <div class="d-flex justify-content-between"><span>Delivery Fee</span><span id="summaryFee"><?= $defaultFeeDisplay ?></span></div>
-            <div class="d-flex justify-content-between fw-bold"><span>Total</span><span id="summaryTotal"><?= $defaultFeeType === 'negotiable' ? number_format($subtotal) . ' + delivery (TBD)' : number_format($subtotal + $defaultFee) . ' RWF' ?></span></div>
+            <?php if ($showPrice): ?>
+                <div class="d-flex justify-content-between"><span>Subtotal</span><span id="summarySubtotal"><?= number_format($subtotal) ?></span></div>
+                <div class="d-flex justify-content-between"><span>Delivery Fee</span><span id="summaryFee"><?= $defaultFeeDisplay ?></span></div>
+                <div class="d-flex justify-content-between fw-bold"><span>Total</span><span id="summaryTotal"><?= $defaultFeeType === 'negotiable' ? number_format($subtotal) . ' + delivery (TBD)' : number_format($subtotal + $defaultFee) . ' RWF' ?></span></div>
+            <?php else: ?>
+                <p class="text-muted small mb-0">Pricing will be confirmed after your order is placed.</p>
+            <?php endif; ?>
         </div>
     </div>
 </div>
 
 <script>
-const subtotal = <?= json_encode($subtotal) ?>;
+const showPrice = <?= json_encode($showPrice) ?>;
+const subtotal = <?= json_encode($showPrice ? $subtotal : 0) ?>;
 
 function updateDeliveryFee() {
+    if (!showPrice) return;
+
     const existingChecked = document.querySelector('input[name="address_choice"][value="existing"]:checked');
     let fee = 0;
     let feeType = 'fixed';
@@ -367,7 +347,7 @@ const paymentInstructionsEl = document.getElementById('paymentInstructions');
 function syncPaymentProofField() {
     if (!paymentMethodSelectEl || !paymentMethodSelectEl.selectedOptions.length) return;
     const selected = paymentMethodSelectEl.selectedOptions[0];
-    const requiresProof = selected.dataset.requiresProof === '1';
+    const requiresProof = showPrice && selected.dataset.requiresProof === '1';
     paymentProofField.classList.toggle('d-none', !requiresProof);
     paymentProofInput.required = requiresProof;
     if (!requiresProof) paymentProofInput.value = '';

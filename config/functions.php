@@ -38,6 +38,8 @@ const PERMISSION_MODULES = [
     'products'        => 'Products',
     'orders'          => 'Orders',
     'assign_incharge' => 'Assign Order Incharge',
+    'edit_orders'     => 'Edit Pending Order Items',
+    'reveal_price'    => 'Reveal Price to Customer',
 ];
 
 function is_super_admin(): bool
@@ -143,6 +145,37 @@ function is_ajax(): bool
     return isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 }
 
+const PAYMENT_PROOF_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
+const PAYMENT_PROOF_MAX_BYTES = 3 * 1024 * 1024;
+
+// Returns [storedPath, error]. storedPath is relative to /uploads.
+function handle_payment_proof_upload(array $file): array
+{
+    if ($file['error'] === UPLOAD_ERR_NO_FILE) {
+        return [null, null];
+    }
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        return [null, 'Payment proof upload failed.'];
+    }
+    if ($file['size'] > PAYMENT_PROOF_MAX_BYTES) {
+        return [null, 'Payment proof must be smaller than 3MB.'];
+    }
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, PAYMENT_PROOF_EXT, true)) {
+        return [null, 'Payment proof must be jpg, png, gif, webp or pdf.'];
+    }
+    $subdir = date('Y') . '/' . date('m');
+    $dir = dirname(__DIR__) . '/uploads/payment_proofs/' . $subdir;
+    if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+        return [null, 'Could not save payment proof.'];
+    }
+    $filename = uniqid('proof_', true) . '.' . $ext;
+    if (!move_uploaded_file($file['tmp_name'], $dir . '/' . $filename)) {
+        return [null, 'Could not save payment proof.'];
+    }
+    return ['payment_proofs/' . $subdir . '/' . $filename, null];
+}
+
 function json_response(array $data): void
 {
     header('Content-Type: application/json');
@@ -197,6 +230,14 @@ function notify_order_placed(mysqli $conn, int $orderId, float $amount, string $
         mysqli_stmt_bind_param($stmt, 'iis', $adminId, $orderId, $message);
         mysqli_stmt_execute($stmt);
     }
+}
+
+function notify_price_revealed(mysqli $conn, int $orderId, int $customerId): void
+{
+    $message = 'Pricing has been added to your order #' . $orderId . ' — view it and upload payment proof.';
+    $stmt = mysqli_prepare($conn, 'INSERT INTO notifications (user_id, order_id, message) VALUES (?, ?, ?)');
+    mysqli_stmt_bind_param($stmt, 'iis', $customerId, $orderId, $message);
+    mysqli_stmt_execute($stmt);
 }
 
 function fetch_status_history(mysqli $conn, int $orderId): array
@@ -257,6 +298,38 @@ function set_setting(mysqli $conn, string $key, string $value): void
     mysqli_stmt_execute($stmt);
 }
 
+// Recomputes an order's total from its current order_items rows (after a
+// quantity/price edit) and persists it. Returns the new total.
+function recalc_order_total(mysqli $conn, int $orderId): float
+{
+    $stmt = mysqli_prepare($conn, 'SELECT COALESCE(SUM(subtotal), 0) AS total FROM order_items WHERE order_id = ?');
+    mysqli_stmt_bind_param($stmt, 'i', $orderId);
+    mysqli_stmt_execute($stmt);
+    $total = (float) mysqli_stmt_get_result($stmt)->fetch_assoc()['total'];
+
+    $stmt = mysqli_prepare($conn, 'UPDATE orders SET total = ? WHERE id = ?');
+    mysqli_stmt_bind_param($stmt, 'di', $total, $orderId);
+    mysqli_stmt_execute($stmt);
+
+    return $total;
+}
+
+// Products that can actually be added to an order line: active leaf nodes
+// (no variants/packages underneath them), same rule cart/checkout use.
+function fetch_purchasable_products(mysqli $conn): array
+{
+    return mysqli_fetch_all(mysqli_query($conn, "
+        SELECT p.id, p.price,
+               CONCAT_WS(' — ', grandparent.name, parent.name, p.name) AS display_name
+        FROM products p
+        LEFT JOIN products parent ON parent.id = p.parent_id
+        LEFT JOIN products grandparent ON grandparent.id = parent.parent_id
+        WHERE p.status = 'active'
+          AND NOT EXISTS (SELECT 1 FROM products c WHERE c.parent_id = p.id)
+        ORDER BY display_name
+    "), MYSQLI_ASSOC);
+}
+
 function cart_total_amount(mysqli $conn, int $userId): float
 {
     $stmt = mysqli_prepare($conn, '
@@ -272,4 +345,29 @@ function cart_total_amount(mysqli $conn, int $userId): float
     $row = mysqli_fetch_assoc($result);
 
     return (float) ($row['total'] ?? 0);
+}
+
+function cart_item_count(mysqli $conn, int $userId): int
+{
+    $stmt = mysqli_prepare($conn, '
+        SELECT COUNT(*) AS count
+        FROM cart_items ci
+        JOIN carts c ON c.id = ci.cart_id
+        WHERE c.user_id = ?
+    ');
+    mysqli_stmt_bind_param($stmt, 'i', $userId);
+    mysqli_stmt_execute($stmt);
+    $result = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_assoc($result);
+
+    return (int) ($row['count'] ?? 0);
+}
+
+function cart_badge_value(mysqli $conn, int $userId): float
+{
+    if (get_setting($conn, 'show_price', '1') === '1') {
+        return cart_total_amount($conn, $userId);
+    }
+
+    return cart_item_count($conn, $userId);
 }

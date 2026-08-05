@@ -5,18 +5,26 @@ require_login();
 $userId  = (int) $_SESSION['user_id'];
 $perPage = 10;
 
-function render_order_rows(array $orders): string
+function render_order_rows(array $orders, bool $showPrice): string
 {
     if (!$orders) {
         return '<tr><td colspan="6" class="text-center text-muted">You have no orders yet. <a href="shop">Start shopping</a>.</td></tr>';
     }
 
     ob_start();
-    foreach ($orders as $order): ?>
+    foreach ($orders as $order):
+        $rowShowPrice = $showPrice || $order['status'] !== 'pending';
+        ?>
         <tr>
             <td>#<?= (int) $order['id'] ?></td>
             <td><?= e(date('M j, Y', strtotime($order['created_at']))) ?></td>
-            <td><?= number_format((float) $order['total'] + (float) $order['delivery_fee']) ?> RWF<?= $order['delivery_fee_type'] === 'negotiable' ? ' + TBD' : '' ?></td>
+            <td>
+                <?php if ($rowShowPrice): ?>
+                    <?= number_format((float) $order['total'] + (float) $order['delivery_fee']) ?> RWF<?= $order['delivery_fee_type'] === 'negotiable' ? ' + TBD' : '' ?>
+                <?php else: ?>
+                    <span class="text-muted">Pending confirmation</span>
+                <?php endif; ?>
+            </td>
             <td><?= e($order['payment_method']) ?></td>
             <td><span class="badge <?= order_status_badge_class($order['status']) ?>"><?= e(str_replace('_', ' ', $order['status'])) ?></span></td>
             <td><a href="order?id=<?= (int) $order['id'] ?>" class="btn btn-sm btn-outline-dark">View</a></td>
@@ -69,10 +77,11 @@ $stmt = mysqli_prepare($conn, '
 mysqli_stmt_bind_param($stmt, 'iii', $userId, $perPage, $offset);
 mysqli_stmt_execute($stmt);
 $orders = mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+$showPrice = get_setting($conn, 'show_price', '1') === '1';
 
 if (is_ajax()) {
     json_response([
-        'html'       => render_order_rows($orders),
+        'html'       => render_order_rows($orders, $showPrice),
         'pagination' => render_orders_pagination($page, $totalPages),
     ]);
 }
@@ -95,7 +104,7 @@ require_once __DIR__ . '/includes/header.php';
                 <th></th>
             </tr>
         </thead>
-        <tbody id="orderRows"><?= render_order_rows($orders) ?></tbody>
+        <tbody id="orderRows"><?= render_order_rows($orders, $showPrice) ?></tbody>
     </table>
 </div>
 

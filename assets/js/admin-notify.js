@@ -1,17 +1,19 @@
-// Live "new order" popups + navbar bell (badge + dropdown list) for admins.
-// Long-polls admin/notifications_poll.php — each response either carries this
-// admin's waiting notifications or arrives empty after ~25s, and either way
-// we immediately poll again. A notification stays in the database (and
-// counted in the badge / shown in the bell's dropdown) until the admin
-// explicitly marks it read — dismissing it from the popup card, the dropdown
-// list, or following either one's "View Orders" link — at which point it's
-// deleted server-side. Only loaded on pages where the admin bell is present.
+// Live order-related popups + navbar bell (badge + dropdown list), for both
+// admins (new order placed, etc.) and customers (e.g. pricing revealed on
+// their order). Long-polls admin/notifications_poll.php — each response
+// either carries this user's waiting notifications or arrives empty after
+// ~25s, and either way we immediately poll again. A notification stays in
+// the database (and counted in the badge / shown in the bell's dropdown)
+// until the user explicitly marks it read — dismissing it from the popup
+// card, the dropdown list, or following either one's "View Order" link — at
+// which point it's deleted server-side. Loaded on every page for any logged-in user.
 (function () {
-    var adminBase = window.__ADMIN_NOTIFY_BASE || '';
+    var pollBase = window.__ADMIN_NOTIFY_BASE || '';
+    var orderBase = window.__NOTIFY_ORDER_BASE || '';
     var siteBase = window.__SITE_BASE || '';
-    var pollUrl = adminBase + 'notifications_poll.php';
-    var ordersUrl = adminBase + 'orders';
-    function orderUrl(n) { return n.order_id ? adminBase + 'order?id=' + n.order_id : ordersUrl; }
+    var pollUrl = pollBase + 'notifications_poll.php';
+    var ordersUrl = orderBase + 'orders';
+    function orderUrl(n) { return n.order_id ? orderBase + 'order?id=' + n.order_id : ordersUrl; }
 
     var style = document.createElement('style');
     style.textContent = [
